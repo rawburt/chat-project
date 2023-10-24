@@ -37,8 +37,6 @@ enum ParseError {
 
 #[derive(Debug, PartialEq)]
 enum ParsedAction {
-    /// Take no action
-    None,
     /// Disconnect the client.
     Quit,
     /// Process a well-formed message.

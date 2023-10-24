@@ -529,5 +529,10 @@ mod tests {
             Some("@robert SAID hi there! how are you?".to_string()),
             receiver_kelsey.recv().await
         );
+
+        assert_eq!(
+            state.say_to_user("@robert", "@notreal", "uhoh!!!!??!!".to_string()),
+            Err(ServerError::UserUnknown("@notreal".to_string()))
+        );
     }
 }
