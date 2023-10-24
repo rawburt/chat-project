@@ -4,6 +4,24 @@ use tokio::sync::mpsc::UnboundedSender;
 #[derive(Debug)]
 pub struct User {
     sender: UnboundedSender<String>,
+    rooms: HashSet<String>,
+}
+
+impl User {
+    pub fn new(sender: UnboundedSender<String>) -> Self {
+        Self {
+            sender,
+            rooms: HashSet::new(),
+        }
+    }
+
+    pub fn add_room(&mut self, name: String) {
+        self.rooms.insert(name);
+    }
+
+    pub fn remove_room(&mut self, name: &str) {
+        self.rooms.remove(name);
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -21,11 +39,21 @@ impl Room {
     pub fn add_user(&mut self, name: String) {
         self.users.insert(name);
     }
+
+    pub fn remove_user(&mut self, name: &str) -> bool {
+        self.users.remove(name)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.users.is_empty()
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum ServerError {
+    RoomUnknown(String),
     UserAlreadyExists(String),
+    UserNotInRoom(String, String),
     UserUnknown(String),
 }
 
@@ -53,7 +81,13 @@ impl ServerState {
 
     pub fn remove_user(&mut self, name: &str) -> Result<(), ServerError> {
         match self.users.remove(name) {
-            Some(_) => Ok(()),
+            Some(user) => {
+                // remove user from rooms
+                for room_name in user.rooms {
+                    self.leave_room(&room_name, name)?;
+                }
+                Ok(())
+            }
             None => Err(ServerError::UserUnknown(name.to_string())),
         }
     }
@@ -63,22 +97,73 @@ impl ServerState {
             return Err(ServerError::UserUnknown(user_name));
         }
         if let Some(room) = self.rooms.get_mut(&room_name) {
-            room.add_user(user_name);
+            // add user to existing room
+            room.add_user(user_name.clone());
         } else {
+            // create new room
             let mut room = Room::new();
-            room.add_user(user_name);
-            self.rooms.insert(room_name, room);
+            room.add_user(user_name.clone());
+            self.rooms.insert(room_name.clone(), room);
+        }
+        // add room to user record
+        if let Some(user) = self.users.get_mut(&user_name) {
+            user.add_room(room_name);
         }
         Ok(())
     }
 
-    // pub fn rename_user(&mut self, old_name: &str, new_name: String) -> Result<(), ServerError> {}
+    pub fn leave_room(&mut self, room_name: &str, user_name: &str) -> Result<(), ServerError> {
+        if let Some(room) = self.rooms.get_mut(room_name) {
+            if room.remove_user(user_name) {
+                // delete rooms that are empty
+                if room.is_empty() {
+                    self.rooms.remove(room_name);
+                }
+                // remove room from user record
+                if let Some(user) = self.users.get_mut(user_name) {
+                    user.remove_room(room_name);
+                }
+                Ok(())
+            } else {
+                Err(ServerError::UserNotInRoom(
+                    user_name.to_string(),
+                    room_name.to_string(),
+                ))
+            }
+        } else {
+            Err(ServerError::RoomUnknown(room_name.to_string()))
+        }
+    }
 
-    // rename_user
-    // join_room
-    // leave_room
-    // room_names
-    // room_user_names
+    pub fn rename_user(&mut self, old_name: &str, new_name: &str) -> Result<(), ServerError> {
+        if let Some(user) = self.users.remove(old_name) {
+            // rename user in each room the user is in
+            for room_name in &user.rooms {
+                if let Some(room) = self.rooms.get_mut(room_name) {
+                    room.remove_user(old_name);
+                    room.add_user(new_name.to_string());
+                }
+            }
+            // rename user in main user list
+            self.users.insert(new_name.to_string(), user);
+            Ok(())
+        } else {
+            Err(ServerError::UserUnknown(old_name.to_string()))
+        }
+    }
+
+    pub fn rooms(&self) -> Vec<String> {
+        self.rooms.keys().map(|k| k.to_string()).collect()
+    }
+
+    pub fn users(&self, room_name: &str) -> Result<Vec<String>, ServerError> {
+        if let Some(room) = self.rooms.get(room_name) {
+            Ok(room.users.iter().map(|u| u.to_string()).collect())
+        } else {
+            Err(ServerError::RoomUnknown(room_name.to_string()))
+        }
+    }
+
     // say_to_room
     // say_to_user
 }
@@ -94,12 +179,12 @@ mod tests {
         assert!(state.users.get("@robert").is_none());
         let (sender, _receiver) = mpsc::unbounded_channel();
         assert!(state
-            .add_user("@robert".to_string(), User { sender })
+            .add_user("@robert".to_string(), User::new(sender))
             .is_ok());
         assert!(state.users.get("@robert").is_some());
         let (sender, _receiver) = mpsc::unbounded_channel();
         assert_eq!(
-            state.add_user("@robert".to_string(), User { sender }),
+            state.add_user("@robert".to_string(), User::new(sender)),
             Err(ServerError::UserAlreadyExists("@robert".to_string()))
         );
     }
@@ -109,7 +194,7 @@ mod tests {
         let mut state = ServerState::new();
         let (sender, _receiver) = mpsc::unbounded_channel();
         assert!(state
-            .add_user("@robert".to_string(), User { sender })
+            .add_user("@robert".to_string(), User::new(sender))
             .is_ok());
         assert!(state.users.get("@robert").is_some());
         assert!(state.remove_user("@robert").is_ok());
@@ -125,7 +210,7 @@ mod tests {
         let mut state = ServerState::new();
         let (sender, _receiver) = mpsc::unbounded_channel();
         assert!(state
-            .add_user("@robert".to_string(), User { sender })
+            .add_user("@robert".to_string(), User::new(sender))
             .is_ok());
 
         // join room that does not exist with user that exists
@@ -134,26 +219,256 @@ mod tests {
             .join_room("#testroom".to_string(), "@robert".to_string())
             .is_ok());
         assert!(state.rooms.contains_key("#testroom"));
+        assert!(state
+            .users
+            .get("@robert")
+            .unwrap()
+            .rooms
+            .contains("#testroom"));
 
         // join room that exists with user that exists
         let (sender, _receiver) = mpsc::unbounded_channel();
         assert!(state
-            .add_user("@kelsey".to_string(), User { sender })
+            .add_user("@kelsey".to_string(), User::new(sender))
             .is_ok());
         assert!(state
             .join_room("#testroom".to_string(), "@kelsey".to_string())
             .is_ok());
+        assert!(state
+            .users
+            .get("@kelsey")
+            .unwrap()
+            .rooms
+            .contains("#testroom"));
 
         // join room that does not exist with user that does not exist
         assert_eq!(
             state.join_room("#none".to_string(), "@notreal".to_string()),
             Err(ServerError::UserUnknown("@notreal".to_string()))
         );
-        
+
         // join room that exists with user that does not exist
         assert_eq!(
             state.join_room("#testroom".to_string(), "@fakey".to_string()),
             Err(ServerError::UserUnknown("@fakey".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_server_state_leave_room() {
+        let mut state = ServerState::new();
+        let (sender, _receiver) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@robert".to_string(), User::new(sender))
+            .is_ok());
+        assert!(state
+            .join_room("#testroom".to_string(), "@robert".to_string())
+            .is_ok());
+        assert!(state.rooms.contains_key("#testroom"));
+        assert!(state
+            .users
+            .get("@robert")
+            .unwrap()
+            .rooms
+            .contains("#testroom"));
+        assert!(state.leave_room("#testroom", "@robert").is_ok());
+        assert!(!state
+            .users
+            .get("@robert")
+            .unwrap()
+            .rooms
+            .contains("#testroom"));
+
+        // last user to leave room makes room go away
+        assert!(!state.rooms.contains_key("#testroom"));
+
+        // room does not exist
+        assert_eq!(
+            state.leave_room("#fakeroom", "@robert"),
+            Err(ServerError::RoomUnknown("#fakeroom".to_string()))
+        );
+
+        // user does not exist
+        assert!(state
+            .join_room("#testroom".to_string(), "@robert".to_string())
+            .is_ok());
+
+        assert_eq!(
+            state.leave_room("#testroom", "@kelsey"),
+            Err(ServerError::UserNotInRoom(
+                "@kelsey".to_string(),
+                "#testroom".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn test_server_state_remove_user_leaves_room() {
+        let mut state = ServerState::new();
+        let (sender, _receiver) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@kelsey".to_string(), User::new(sender))
+            .is_ok());
+        assert!(state
+            .join_room("#applejuice".to_string(), "@kelsey".to_string())
+            .is_ok());
+        assert!(state.rooms.contains_key("#applejuice"));
+        assert!(state.users.contains_key("@kelsey"));
+        assert!(state.remove_user("@kelsey").is_ok());
+        assert!(!state.rooms.contains_key("#applejuice"));
+        assert!(!state.users.contains_key("@kelsey"));
+    }
+
+    #[test]
+    fn test_server_state_rename_user() {
+        let mut state = ServerState::new();
+        let (sender, _receiver) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@kelsey".to_string(), User::new(sender))
+            .is_ok());
+        assert!(state
+            .join_room("#applejuice".to_string(), "@kelsey".to_string())
+            .is_ok());
+        assert!(state
+            .join_room("#testing123".to_string(), "@kelsey".to_string())
+            .is_ok());
+
+        // initial state
+        assert!(state.rooms.contains_key("#applejuice"));
+        assert!(state.rooms.contains_key("#testing123"));
+
+        assert!(state
+            .users
+            .get("@kelsey")
+            .unwrap()
+            .rooms
+            .contains("#applejuice"));
+        assert!(state
+            .users
+            .get("@kelsey")
+            .unwrap()
+            .rooms
+            .contains("#testing123"));
+
+        assert!(state
+            .rooms
+            .get("#applejuice")
+            .unwrap()
+            .users
+            .contains("@kelsey"));
+        assert!(state
+            .rooms
+            .get("#testing123")
+            .unwrap()
+            .users
+            .contains("@kelsey"));
+
+        // renamed state
+        assert!(state.rename_user("@kelsey", "@littleb1t").is_ok());
+
+        assert!(state.users.get("@kelsey").is_none());
+        assert!(state
+            .users
+            .get("@littleb1t")
+            .unwrap()
+            .rooms
+            .contains("#applejuice"));
+        assert!(state
+            .users
+            .get("@littleb1t")
+            .unwrap()
+            .rooms
+            .contains("#testing123"));
+
+        assert!(state
+            .rooms
+            .get("#applejuice")
+            .unwrap()
+            .users
+            .contains("@littleb1t"));
+        assert!(state
+            .rooms
+            .get("#testing123")
+            .unwrap()
+            .users
+            .contains("@littleb1t"));
+    }
+
+    #[test]
+    fn test_server_state_rename_user_bad() {
+        let mut state = ServerState::new();
+        assert_eq!(
+            state.rename_user("@robert", "@bobert"),
+            Err(ServerError::UserUnknown("@robert".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_server_state_rooms() {
+        let mut state = ServerState::new();
+        let (sender, _receiver) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@kelsey".to_string(), User::new(sender))
+            .is_ok());
+        assert!(state
+            .join_room("#applejuice".to_string(), "@kelsey".to_string())
+            .is_ok());
+        assert!(state
+            .join_room("#testing123".to_string(), "@kelsey".to_string())
+            .is_ok());
+        assert!(state
+            .join_room("#room_123".to_string(), "@kelsey".to_string())
+            .is_ok());
+
+        let mut rooms = state.rooms();
+        rooms.sort();
+        let mut expected = vec![
+            "#applejuice".to_string(),
+            "#testing123".to_string(),
+            "#room_123".to_string(),
+        ];
+        expected.sort();
+        assert_eq!(rooms, expected);
+    }
+
+    #[test]
+    fn test_server_state_users() {
+        let mut state = ServerState::new();
+        let (sender, _receiver) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@kelsey".to_string(), User::new(sender))
+            .is_ok());
+        assert!(state
+            .join_room("#applejuice".to_string(), "@kelsey".to_string())
+            .is_ok());
+        let (sender, _receiver) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@robert".to_string(), User::new(sender))
+            .is_ok());
+        assert!(state
+            .join_room("#applejuice".to_string(), "@robert".to_string())
+            .is_ok());
+        let (sender, _receiver) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@ch4ch4".to_string(), User::new(sender))
+            .is_ok());
+        assert!(state
+            .join_room("#applejuice".to_string(), "@ch4ch4".to_string())
+            .is_ok());
+
+        let mut users = state.users("#applejuice").unwrap();
+        users.sort();
+        let mut expected = vec![
+            "@ch4ch4".to_string(),
+            "@robert".to_string(),
+            "@kelsey".to_string(),
+        ];
+        expected.sort();
+        assert_eq!(users, expected);
+
+        assert_eq!(
+            state.users("#notrealroom"),
+            Err(ServerError::RoomUnknown("#notrealroom".to_string()))
         );
     }
 }
