@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use chat_project::{
-    parser::{parse_incoming, Command, IncomingMsg, ParseError, ParsedAction},
+    parser::{parse_incoming, Command, IncomingMsg, ParsedAction},
     server_state::{ServerState, User},
 };
 use futures::SinkExt;
