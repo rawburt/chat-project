@@ -45,6 +45,7 @@ pub enum ParseError {
     BadArguments,
 }
 
+// TODO: implement Display instead
 impl ToString for ParseError {
     fn to_string(&self) -> String {
         match self {

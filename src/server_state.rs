@@ -9,6 +9,7 @@ pub enum OutgoingMsg {
     SaidRoom(String, String, String),
 }
 
+// TODO: implement Display instead
 impl ToString for OutgoingMsg {
     fn to_string(&self) -> String {
         match self {
@@ -82,18 +83,21 @@ pub enum ServerError {
     UserUnknown(String),
 }
 
-impl ToString for ServerError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for ServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::RoomUnknown(name) => format!("ERROR room unknown {}", name),
-            Self::UserAlreadyExists(name) => format!("ERROR user already exists {}", name),
+            Self::RoomUnknown(name) => write!(f, "ERROR room unknown {}", name),
+            Self::UserAlreadyExists(name) => write!(f, "ERROR user already exists {}", name),
             Self::UserNotInRoom(user_name, room_name) => {
-                format!("ERROR user not in room {} {}", user_name, room_name)
+                write!(f, "ERROR user not in room {} {}", user_name, room_name)
             }
-            Self::UserUnknown(name) => format!("ERROR user unknown {}", name),
+            Self::UserUnknown(name) => write!(f, "ERROR user unknown {}", name),
         }
     }
 }
+
+impl std::error::Error for ServerError {}
+
 
 #[derive(Debug)]
 pub struct ServerState {

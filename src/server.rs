@@ -42,17 +42,6 @@ impl Client {
         }
     }
 
-    pub async fn next(&mut self) -> anyhow::Result<ClientAction> {
-        match self.framed.next().await {
-            // disconnected
-            None => Ok(ClientAction::Quit),
-            // error reading stream
-            Some(Err(e)) => Err(anyhow!(e)),
-            // received data from client
-            Some(Ok(input)) => Ok(ClientAction::Parsed(parse_incoming(&input))),
-        }
-    }
-
     pub async fn send_string(&mut self, string: String) -> anyhow::Result<()> {
         self.framed.send(string).await?;
         Ok(())
@@ -63,13 +52,24 @@ impl Client {
     }
 }
 
+async fn client_action(framed: &mut Framed<TcpStream, LinesCodec>) -> anyhow::Result<ClientAction> {
+    match framed.next().await {
+        // disconnected
+        None => Ok(ClientAction::Quit),
+        // error reading stream
+        Some(Err(e)) => Err(anyhow!(e)),
+        // received data from client
+        Some(Ok(input)) => Ok(ClientAction::Parsed(parse_incoming(&input))),
+    }
+}
+
 async fn client_registration(
     server_state: Arc<Mutex<ServerState>>,
     client: &mut Client,
 ) -> anyhow::Result<bool> {
     // wait for a NAME in order to register the client and user into the server state
     loop {
-        match client.next().await? {
+        match client_action(&mut client.framed).await? {
             ClientAction::Quit => return Ok(false),
             ClientAction::Parsed(parsed_action) => {
                 match parsed_action {
@@ -81,6 +81,7 @@ async fn client_registration(
                                 client.set_name(name);
                                 return Ok(true);
                             }
+                            // error trying to save client with given user name. possible error is duplicate user name.
                             Err(server_error) => {
                                 client.send_string(server_error.to_string()).await?
                             }
@@ -110,7 +111,7 @@ pub async fn client_connection(
     let mut client = Client::new(tcp_stream, socket_addr);
 
     // wait for a NAME in order to register the client and user into the server state
-    let registered = client_registration(server_state, &mut client).await?;
+    let registered = client_registration(server_state.clone(), &mut client).await?;
 
     // if the client wasn't registered then they quit or a connection was lost
     if !registered {
@@ -118,9 +119,35 @@ pub async fn client_connection(
     }
 
     // main client loop
+    loop {
+        tokio::select! {
+            // handle outgoing data to client
+            Some(message) = client.receiver.recv() => {
+                client.send_string(message).await?;
+            }
+            result = client_action(&mut client.framed) => match result {
+                Err(e) => return Err(anyhow!(e)),
+                Ok(ClientAction::Quit) => break,
+                Ok(ClientAction::Parsed(parsed_action)) => match parsed_action {
+                    ParsedAction::Process(_) => {
+                        todo!();
+                    },
+                    ParsedAction::Error(_, parse_error) => {
+                        client.send_string(parse_error.to_string()).await?
+                    }
+                    ParsedAction::None => {}
+                }
+            }
+        }
+    }
 
-    // handle incoming data from client
-    // handle outgoing data to client
+    // remove the user from the server state
+    if let Some(name) = client.name {
+        let mut state = server_state.lock().await;
+        if let Err(e) = state.remove_user(&name) {
+            return Err(anyhow!(e));
+        }
+    }
 
     Ok(())
 }
