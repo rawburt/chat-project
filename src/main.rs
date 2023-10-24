@@ -1,6 +1,6 @@
 use chat_project::server_state::ServerState;
 use clap::Parser;
-use std::{io, sync::Arc};
+use std::sync::Arc;
 use tokio::{net::TcpListener, sync::Mutex};
 
 pub mod server;

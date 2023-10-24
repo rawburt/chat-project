@@ -62,7 +62,7 @@ pub fn parse_incoming(input: &str) -> ParsedAction {
         return ParsedAction::None;
     }
 
-    let pieces: Vec<&str> = input.split(" ").collect();
+    let pieces: Vec<&str> = input.split(' ').collect();
 
     match pieces[0] {
         "QUIT" => ParsedAction::Process(IncomingMsg::Quit),

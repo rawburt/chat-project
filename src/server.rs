@@ -85,7 +85,7 @@ pub async fn client_connection(
                             Ok(()) => {
                                 client.set_name(name);
                                 break 'register;
-                            },
+                            }
                             Err(e) => client.send_error(e).await?,
                         }
                     }
