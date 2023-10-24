@@ -4,13 +4,16 @@ use tokio::sync::mpsc::UnboundedSender;
 #[derive(Debug)]
 pub enum OutgoingMsg {
     // SAID(<from>, <message>)
-    Said(String, String),
+    SaidUser(String, String),
+    // SAID(<room>, <from>, <message>)
+    SaidRoom(String, String, String),
 }
 
 impl ToString for OutgoingMsg {
     fn to_string(&self) -> String {
         match self {
-            Self::Said(from, message) => format!("{} SAID {}", from, message),
+            Self::SaidUser(from, message) => format!("{} SAID {}", from, message),
+            Self::SaidRoom(room, from, message) => format!("{} {} SAID {}", room, from, message),
         }
     }
 }
@@ -193,7 +196,7 @@ impl ServerState {
     ) -> Result<(), ServerError> {
         if let Some(to) = self.users.get(to_user) {
             // TODO: better errors
-            to.send(OutgoingMsg::Said(from_user.to_string(), message))
+            to.send(OutgoingMsg::SaidUser(from_user.to_string(), message))
                 .unwrap();
             Ok(())
         } else {
@@ -201,14 +204,37 @@ impl ServerState {
         }
     }
 
-    // say_to_room
-    // say_to_user
+    pub fn say_to_room(
+        &mut self,
+        user_name: &str,
+        room_name: &str,
+        message: String,
+    ) -> Result<(), ServerError> {
+        if let Some(room) = self.rooms.get(room_name) {
+            for room_user_name in &room.users {
+                if room_user_name != user_name {
+                    if let Some(user) = self.users.get_mut(room_user_name) {
+                        // TODO: better errors
+                        user.send(OutgoingMsg::SaidRoom(
+                            room_name.to_string(),
+                            user_name.to_string(),
+                            message.clone(),
+                        ))
+                        .unwrap();
+                    }
+                }
+            }
+            Ok(())
+        } else {
+            Err(ServerError::RoomUnknown(room_name.to_string()))
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::mpsc;
+    use tokio::sync::mpsc::{self, error::TryRecvError};
 
     #[test]
     fn test_server_state_add_user() {
@@ -521,6 +547,8 @@ mod tests {
             .add_user("@robert".to_string(), User::new(sender_robert))
             .is_ok());
 
+        assert_eq!(Err(TryRecvError::Empty), receiver_kelsey.try_recv());
+
         assert!(state
             .say_to_user("@robert", "@kelsey", "hi there! how are you?".to_string())
             .is_ok());
@@ -533,6 +561,53 @@ mod tests {
         assert_eq!(
             state.say_to_user("@robert", "@notreal", "uhoh!!!!??!!".to_string()),
             Err(ServerError::UserUnknown("@notreal".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_server_state_say_to_room() {
+        let mut state = ServerState::new();
+        let (sender_kelsey, mut receiver_kelsey) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@kelsey".to_string(), User::new(sender_kelsey))
+            .is_ok());
+        let (sender_robert, mut receiver_robert) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@robert".to_string(), User::new(sender_robert))
+            .is_ok());
+        let (sender_dave, mut receiver_dave) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@dave".to_string(), User::new(sender_dave))
+            .is_ok());
+
+        assert!(state
+            .join_room("#testroom".to_string(), "@kelsey".to_string())
+            .is_ok());
+        assert!(state
+            .join_room("#testroom".to_string(), "@robert".to_string())
+            .is_ok());
+        assert!(state
+            .join_room("#testroom".to_string(), "@dave".to_string())
+            .is_ok());
+
+        assert!(state
+            .say_to_room("@dave", "#testroom", "hello my room friends!".to_string())
+            .is_ok());
+
+        // dont send room message to self
+        assert_eq!(Err(TryRecvError::Empty), receiver_dave.try_recv());
+        assert_eq!(
+            Some("#testroom @dave SAID hello my room friends!".to_string()),
+            receiver_kelsey.recv().await
+        );
+        assert_eq!(
+            Some("#testroom @dave SAID hello my room friends!".to_string()),
+            receiver_robert.recv().await
+        );
+
+        assert_eq!(
+            state.say_to_room("@dave", "#notreal", "hello my room friends!".to_string()),
+            Err(ServerError::RoomUnknown("#notreal".to_string()))
         );
     }
 }
