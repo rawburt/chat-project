@@ -2,6 +2,20 @@ use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
+pub enum OutgoingMsg {
+    // SAID(<from>, <message>)
+    Said(String, String),
+}
+
+impl ToString for OutgoingMsg {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Said(from, message) => format!("{} SAID {}", from, message),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct User {
     sender: UnboundedSender<String>,
     rooms: HashSet<String>,
@@ -21,6 +35,13 @@ impl User {
 
     pub fn remove_room(&mut self, name: &str) {
         self.rooms.remove(name);
+    }
+
+    pub fn send(&self, message: OutgoingMsg) -> Result<(), String> {
+        match self.sender.send(message.to_string()) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
     }
 }
 
@@ -161,6 +182,22 @@ impl ServerState {
             Ok(room.users.iter().map(|u| u.to_string()).collect())
         } else {
             Err(ServerError::RoomUnknown(room_name.to_string()))
+        }
+    }
+
+    pub fn say_to_user(
+        &self,
+        from_user: &str,
+        to_user: &str,
+        message: String,
+    ) -> Result<(), ServerError> {
+        if let Some(to) = self.users.get(to_user) {
+            // TODO: better errors
+            to.send(OutgoingMsg::Said(from_user.to_string(), message))
+                .unwrap();
+            Ok(())
+        } else {
+            Err(ServerError::UserUnknown(to_user.to_string()))
         }
     }
 
@@ -469,6 +506,28 @@ mod tests {
         assert_eq!(
             state.users("#notrealroom"),
             Err(ServerError::RoomUnknown("#notrealroom".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_server_state_say_to_user() {
+        let mut state = ServerState::new();
+        let (sender_kelsey, mut receiver_kelsey) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@kelsey".to_string(), User::new(sender_kelsey))
+            .is_ok());
+        let (sender_robert, _receiver_robert) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@robert".to_string(), User::new(sender_robert))
+            .is_ok());
+
+        assert!(state
+            .say_to_user("@robert", "@kelsey", "hi there! how are you?".to_string())
+            .is_ok());
+
+        assert_eq!(
+            Some("@robert SAID hi there! how are you?".to_string()),
+            receiver_kelsey.recv().await
         );
     }
 }
