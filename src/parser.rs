@@ -159,8 +159,14 @@ mod tests {
 
     #[test]
     fn test_parse_incoming_quit() {
-        assert_eq!(parse_incoming("QUIT"), ParsedAction::Process(IncomingMsg::Quit));
-        assert_eq!(parse_incoming("QUIT other stuff"), ParsedAction::Process(IncomingMsg::Quit));
+        assert_eq!(
+            parse_incoming("QUIT"),
+            ParsedAction::Process(IncomingMsg::Quit)
+        );
+        assert_eq!(
+            parse_incoming("QUIT other stuff"),
+            ParsedAction::Process(IncomingMsg::Quit)
+        );
         assert_eq!(parse_incoming("quit other stuff"), ParsedAction::None);
         assert_eq!(parse_incoming("quit"), ParsedAction::None);
     }
@@ -183,10 +189,7 @@ mod tests {
             parse_incoming("NAME @robert**"),
             ParsedAction::Error(Command::Name, ParseError::BadNameFormat)
         );
-        assert_eq!(
-            parse_incoming("name"),
-            ParsedAction::Error(Command::Name, ParseError::None)
-        );
+        assert_eq!(parse_incoming("name"), ParsedAction::None);
     }
 
     #[test]
@@ -207,10 +210,7 @@ mod tests {
             parse_incoming("JOIN @room"),
             ParsedAction::Error(Command::Join, ParseError::BadRoomNameFormat)
         );
-        assert_eq!(
-            parse_incoming("join"),
-            ParsedAction::Error(Command::Join, ParseError::None)
-        );
+        assert_eq!(parse_incoming("join"), ParsedAction::None);
     }
 
     #[test]
@@ -231,10 +231,7 @@ mod tests {
             parse_incoming("LEAVE @room"),
             ParsedAction::Error(Command::Leave, ParseError::BadRoomNameFormat)
         );
-        assert_eq!(
-            parse_incoming("leave"),
-            ParsedAction::Error(Command::Leave, ParseError::None)
-        );
+        assert_eq!(parse_incoming("leave"), ParsedAction::None);
     }
 
     #[test]
