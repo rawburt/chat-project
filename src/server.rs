@@ -101,6 +101,16 @@ async fn client_registration(
     }
 }
 
+async fn client_teardown(server_state: Arc<Mutex<ServerState>>, client: &Client) -> anyhow::Result<()> {
+    if let Some(name) = &client.name {
+        let mut state = server_state.lock().await;
+        if let Err(e) = state.remove_user(name) {
+            return Err(anyhow!(e));
+        }
+    }
+    Ok(())
+}
+
 /// The entry point for a new client connection to the server.
 pub async fn client_connection(
     server_state: Arc<Mutex<ServerState>>,
@@ -126,9 +136,16 @@ pub async fn client_connection(
                 client.send_string(message).await?;
             }
             result = client_action(&mut client.framed) => match result {
-                Err(e) => return Err(anyhow!(e)),
+                // some kind of bad thing happened. remove the client from the state and raise an error.
+                Err(e) => {
+                    client_teardown(server_state.clone(), &client).await?;
+                    return Err(anyhow!(e))
+                },
+                // exit the loop for proper state cleanup
                 Ok(ClientAction::Quit) => break,
                 Ok(ClientAction::Parsed(parsed_action)) => match parsed_action {
+                    // QUIT - exit the loop for proper state cleanup
+                    ParsedAction::Process(IncomingMsg::Quit) => break,
                     ParsedAction::Process(_) => {
                         todo!();
                     },
@@ -141,13 +158,8 @@ pub async fn client_connection(
         }
     }
 
-    // remove the user from the server state
-    if let Some(name) = client.name {
-        let mut state = server_state.lock().await;
-        if let Err(e) = state.remove_user(&name) {
-            return Err(anyhow!(e));
-        }
-    }
+    // remove the client from the server state
+    client_teardown(server_state.clone(), &client).await?;
 
     Ok(())
 }
