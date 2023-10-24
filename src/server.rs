@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use chat_project::{
-    parser::{parse_incoming, IncomingMsg, ParsedAction},
-    server_state::{ServerError, ServerState, User},
+    parser::{parse_incoming, Command, IncomingMsg, ParseError, ParsedAction},
+    server_state::{ServerState, User},
 };
 use futures::SinkExt;
 use std::{net::SocketAddr, sync::Arc};
@@ -53,13 +53,50 @@ impl Client {
         }
     }
 
-    pub async fn send_error(&mut self, error: ServerError) -> anyhow::Result<()> {
-        self.framed.send(error.to_string()).await?;
+    pub async fn send_string(&mut self, string: String) -> anyhow::Result<()> {
+        self.framed.send(string).await?;
         Ok(())
     }
 
     pub fn set_name(&mut self, name: String) {
         self.name = Some(name);
+    }
+}
+
+async fn client_registration(
+    server_state: Arc<Mutex<ServerState>>,
+    client: &mut Client,
+) -> anyhow::Result<bool> {
+    // wait for a NAME in order to register the client and user into the server state
+    loop {
+        match client.next().await? {
+            ClientAction::Quit => return Ok(false),
+            ClientAction::Parsed(parsed_action) => {
+                match parsed_action {
+                    // received NAME <user-name>
+                    ParsedAction::Process(IncomingMsg::Name(name)) => {
+                        let mut state = server_state.lock().await;
+                        match state.add_user(name.clone(), User::new(client.sender.clone())) {
+                            Ok(()) => {
+                                client.set_name(name);
+                                return Ok(true);
+                            }
+                            Err(server_error) => {
+                                client.send_string(server_error.to_string()).await?
+                            }
+                        }
+                    }
+                    // received NAME with errors
+                    ParsedAction::Error(Command::Name, parse_error) => {
+                        client.send_string(parse_error.to_string()).await?
+                    }
+                    // received QUIT
+                    ParsedAction::Process(IncomingMsg::Quit) => return Ok(false),
+                    // ignore commands other than NAME and QUIT
+                    ParsedAction::Process(_) | ParsedAction::Error(_, _) | ParsedAction::None => {}
+                }
+            }
+        }
     }
 }
 
@@ -73,31 +110,17 @@ pub async fn client_connection(
     let mut client = Client::new(tcp_stream, socket_addr);
 
     // wait for a NAME in order to register the client and user into the server state
-    'register: loop {
-        match client.next().await? {
-            ClientAction::Quit => return Ok(()),
-            ClientAction::Parsed(parsed_action) => {
-                match parsed_action {
-                    // received NAME <user-name>
-                    ParsedAction::Process(IncomingMsg::Name(name)) => {
-                        let mut state = server_state.lock().await;
-                        match state.add_user(name.clone(), User::new(client.sender.clone())) {
-                            Ok(()) => {
-                                client.set_name(name);
-                                break 'register;
-                            }
-                            Err(e) => client.send_error(e).await?,
-                        }
-                    }
-                    // received QUIT
-                    ParsedAction::Process(IncomingMsg::Quit) => return Ok(()),
-                    // ignore commands other than NAME and QUIT
-                    ParsedAction::Process(_) | ParsedAction::Error(_, _) | ParsedAction::None => {}
-                }
-            }
-        }
+    let registered = client_registration(server_state, &mut client).await?;
+
+    // if the client wasn't registered then they quit or a connection was lost
+    if !registered {
+        return Ok(());
     }
 
     // main client loop
+
+    // handle incoming data from client
+    // handle outgoing data to client
+
     Ok(())
 }

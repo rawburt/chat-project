@@ -37,14 +37,22 @@ pub enum Command {
 
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
-    /// An error state that requires no message to the client.
-    None,
     /// The given name doesn't match the required format.
     BadNameFormat,
     /// The given room name doesn't match the required format.
     BadRoomNameFormat,
     /// The incoming message doesn't have a correct amount of arguments.
     BadArguments,
+}
+
+impl ToString for ParseError {
+    fn to_string(&self) -> String {
+        match self {
+            Self::BadArguments => "ERROR bad arguments".to_string(),
+            Self::BadNameFormat => "ERROR bad name format".to_string(),
+            Self::BadRoomNameFormat => "ERROR bad room name format".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
