@@ -138,143 +138,148 @@ fn parse_incoming(input: &str) -> ParsedAction {
     }
 }
 
-#[test]
-fn test_parse_incoming_empty_input() {
-    assert_eq!(parse_incoming(""), ParsedAction::Error(ParseError::None));
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_parse_incoming_quit() {
-    assert_eq!(parse_incoming("QUIT"), ParsedAction::Quit);
-    assert_eq!(parse_incoming("QUIT other stuff"), ParsedAction::Quit);
-    assert_eq!(
-        parse_incoming("quit other stuff"),
-        ParsedAction::Error(ParseError::None)
-    );
-    assert_eq!(
-        parse_incoming("quit"),
-        ParsedAction::Error(ParseError::None)
-    );
-}
+    #[test]
+    fn test_parse_incoming_empty_input() {
+        assert_eq!(parse_incoming(""), ParsedAction::Error(ParseError::None));
+    }
 
-#[test]
-fn test_parse_incoming_name() {
-    assert_eq!(
-        parse_incoming("NAME @robert"),
-        ParsedAction::Process(IncomingMsg::Name("@robert".to_string()))
-    );
-    assert_eq!(
-        parse_incoming("NAME"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-    assert_eq!(
-        parse_incoming("NAME @robert Steve"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-    assert_eq!(
-        parse_incoming("NAME @robert**"),
-        ParsedAction::Error(ParseError::BadNameFormat)
-    );
-    assert_eq!(
-        parse_incoming("name"),
-        ParsedAction::Error(ParseError::None)
-    );
-}
+    #[test]
+    fn test_parse_incoming_quit() {
+        assert_eq!(parse_incoming("QUIT"), ParsedAction::Quit);
+        assert_eq!(parse_incoming("QUIT other stuff"), ParsedAction::Quit);
+        assert_eq!(
+            parse_incoming("quit other stuff"),
+            ParsedAction::Error(ParseError::None)
+        );
+        assert_eq!(
+            parse_incoming("quit"),
+            ParsedAction::Error(ParseError::None)
+        );
+    }
 
-#[test]
-fn test_parse_incoming_join() {
-    assert_eq!(
-        parse_incoming("JOIN #room1"),
-        ParsedAction::Process(IncomingMsg::Join("#room1".to_string()))
-    );
-    assert_eq!(
-        parse_incoming("JOIN"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-    assert_eq!(
-        parse_incoming("JOIN #room #room2"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-    assert_eq!(
-        parse_incoming("JOIN @room"),
-        ParsedAction::Error(ParseError::BadRoomNameFormat)
-    );
-    assert_eq!(
-        parse_incoming("join"),
-        ParsedAction::Error(ParseError::None)
-    );
-}
+    #[test]
+    fn test_parse_incoming_name() {
+        assert_eq!(
+            parse_incoming("NAME @robert"),
+            ParsedAction::Process(IncomingMsg::Name("@robert".to_string()))
+        );
+        assert_eq!(
+            parse_incoming("NAME"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("NAME @robert Steve"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("NAME @robert**"),
+            ParsedAction::Error(ParseError::BadNameFormat)
+        );
+        assert_eq!(
+            parse_incoming("name"),
+            ParsedAction::Error(ParseError::None)
+        );
+    }
 
-#[test]
-fn test_parse_incoming_leave() {
-    assert_eq!(
-        parse_incoming("LEAVE #room1"),
-        ParsedAction::Process(IncomingMsg::Leave("#room1".to_string()))
-    );
-    assert_eq!(
-        parse_incoming("LEAVE"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-    assert_eq!(
-        parse_incoming("LEAVE #room #room2"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-    assert_eq!(
-        parse_incoming("LEAVE @room"),
-        ParsedAction::Error(ParseError::BadRoomNameFormat)
-    );
-    assert_eq!(
-        parse_incoming("leave"),
-        ParsedAction::Error(ParseError::None)
-    );
-}
+    #[test]
+    fn test_parse_incoming_join() {
+        assert_eq!(
+            parse_incoming("JOIN #room1"),
+            ParsedAction::Process(IncomingMsg::Join("#room1".to_string()))
+        );
+        assert_eq!(
+            parse_incoming("JOIN"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("JOIN #room #room2"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("JOIN @room"),
+            ParsedAction::Error(ParseError::BadRoomNameFormat)
+        );
+        assert_eq!(
+            parse_incoming("join"),
+            ParsedAction::Error(ParseError::None)
+        );
+    }
 
-#[test]
-fn test_parse_incoming_say() {
-    assert_eq!(
-        parse_incoming("SAY #room341 hello everyone!"),
-        ParsedAction::Process(IncomingMsg::SayRoom(
-            "#room341".to_string(),
-            "hello everyone!".to_string()
-        ))
-    );
-    assert_eq!(
-        parse_incoming("SAY @kelsey hi kelsey :)"),
-        ParsedAction::Process(IncomingMsg::SayUser(
-            "@kelsey".to_string(),
-            "hi kelsey :)".to_string()
-        ))
-    );
-    assert_eq!(
-        parse_incoming("SAY #room++ hi there room!"),
-        ParsedAction::Error(ParseError::BadRoomNameFormat)
-    );
-    assert_eq!(
-        parse_incoming("SAY @friend% hi there friend!"),
-        ParsedAction::Error(ParseError::BadNameFormat)
-    );
-    assert_eq!(
-        parse_incoming("SAY @dave"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-    assert_eq!(
-        parse_incoming("SAY #happy"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-    assert_eq!(
-        parse_incoming("SAY "),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
-}
+    #[test]
+    fn test_parse_incoming_leave() {
+        assert_eq!(
+            parse_incoming("LEAVE #room1"),
+            ParsedAction::Process(IncomingMsg::Leave("#room1".to_string()))
+        );
+        assert_eq!(
+            parse_incoming("LEAVE"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("LEAVE #room #room2"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("LEAVE @room"),
+            ParsedAction::Error(ParseError::BadRoomNameFormat)
+        );
+        assert_eq!(
+            parse_incoming("leave"),
+            ParsedAction::Error(ParseError::None)
+        );
+    }
 
-#[test]
-fn test_parse_incoming_rooms() {
-    assert_eq!(
-        parse_incoming("ROOMS"),
-        ParsedAction::Process(IncomingMsg::Rooms)
-    );
-    assert_eq!(
-        parse_incoming("ROOMS stuff"),
-        ParsedAction::Error(ParseError::BadArguments)
-    );
+    #[test]
+    fn test_parse_incoming_say() {
+        assert_eq!(
+            parse_incoming("SAY #room341 hello everyone!"),
+            ParsedAction::Process(IncomingMsg::SayRoom(
+                "#room341".to_string(),
+                "hello everyone!".to_string()
+            ))
+        );
+        assert_eq!(
+            parse_incoming("SAY @kelsey hi kelsey :)"),
+            ParsedAction::Process(IncomingMsg::SayUser(
+                "@kelsey".to_string(),
+                "hi kelsey :)".to_string()
+            ))
+        );
+        assert_eq!(
+            parse_incoming("SAY #room++ hi there room!"),
+            ParsedAction::Error(ParseError::BadRoomNameFormat)
+        );
+        assert_eq!(
+            parse_incoming("SAY @friend% hi there friend!"),
+            ParsedAction::Error(ParseError::BadNameFormat)
+        );
+        assert_eq!(
+            parse_incoming("SAY @dave"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("SAY #happy"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("SAY "),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+    }
+
+    #[test]
+    fn test_parse_incoming_rooms() {
+        assert_eq!(
+            parse_incoming("ROOMS"),
+            ParsedAction::Process(IncomingMsg::Rooms)
+        );
+        assert_eq!(
+            parse_incoming("ROOMS stuff"),
+            ParsedAction::Error(ParseError::BadArguments)
+        );
+    }
 }
