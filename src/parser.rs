@@ -21,6 +21,18 @@ pub enum IncomingMsg {
     Users(String),
     /// ROOMS
     Rooms,
+    /// QUIT
+    Quit,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Command {
+    Name,
+    Join,
+    Leave,
+    Say,
+    Users,
+    Rooms,
 }
 
 #[derive(Debug, PartialEq)]
@@ -37,32 +49,32 @@ pub enum ParseError {
 
 #[derive(Debug, PartialEq)]
 pub enum ParsedAction {
-    /// Disconnect the client.
-    Quit,
+    /// Ignore the input.
+    None,
     /// Process a well-formed message.
     Process(IncomingMsg),
     /// Error parsing a valid command.
-    Error(ParseError),
+    Error(Command, ParseError),
 }
 
 pub fn parse_incoming(input: &str) -> ParsedAction {
     if input.is_empty() {
-        return ParsedAction::Error(ParseError::None);
+        return ParsedAction::None;
     }
 
     let pieces: Vec<&str> = input.split(" ").collect();
 
     match pieces[0] {
-        "QUIT" => ParsedAction::Quit,
+        "QUIT" => ParsedAction::Process(IncomingMsg::Quit),
         "NAME" => {
             if pieces.len() == 2 {
                 if NAME_REGEX.is_match(pieces[1]) {
                     ParsedAction::Process(IncomingMsg::Name(pieces[1].to_string()))
                 } else {
-                    ParsedAction::Error(ParseError::BadNameFormat)
+                    ParsedAction::Error(Command::Name, ParseError::BadNameFormat)
                 }
             } else {
-                ParsedAction::Error(ParseError::BadArguments)
+                ParsedAction::Error(Command::Name, ParseError::BadArguments)
             }
         }
         "JOIN" => {
@@ -70,10 +82,10 @@ pub fn parse_incoming(input: &str) -> ParsedAction {
                 if ROOM_REGEX.is_match(pieces[1]) {
                     ParsedAction::Process(IncomingMsg::Join(pieces[1].to_string()))
                 } else {
-                    ParsedAction::Error(ParseError::BadRoomNameFormat)
+                    ParsedAction::Error(Command::Join, ParseError::BadRoomNameFormat)
                 }
             } else {
-                ParsedAction::Error(ParseError::BadArguments)
+                ParsedAction::Error(Command::Join, ParseError::BadArguments)
             }
         }
         "LEAVE" => {
@@ -81,10 +93,10 @@ pub fn parse_incoming(input: &str) -> ParsedAction {
                 if ROOM_REGEX.is_match(pieces[1]) {
                     ParsedAction::Process(IncomingMsg::Leave(pieces[1].to_string()))
                 } else {
-                    ParsedAction::Error(ParseError::BadRoomNameFormat)
+                    ParsedAction::Error(Command::Leave, ParseError::BadRoomNameFormat)
                 }
             } else {
-                ParsedAction::Error(ParseError::BadArguments)
+                ParsedAction::Error(Command::Leave, ParseError::BadArguments)
             }
         }
         "SAY" => {
@@ -102,22 +114,22 @@ pub fn parse_incoming(input: &str) -> ParsedAction {
                 } else {
                     let next = pieces[1].chars().next().unwrap();
                     if next == '#' {
-                        ParsedAction::Error(ParseError::BadRoomNameFormat)
+                        ParsedAction::Error(Command::Say, ParseError::BadRoomNameFormat)
                     } else if next == '@' {
-                        ParsedAction::Error(ParseError::BadNameFormat)
+                        ParsedAction::Error(Command::Say, ParseError::BadNameFormat)
                     } else {
-                        ParsedAction::Error(ParseError::BadArguments)
+                        ParsedAction::Error(Command::Say, ParseError::BadArguments)
                     }
                 }
             } else {
-                ParsedAction::Error(ParseError::BadArguments)
+                ParsedAction::Error(Command::Say, ParseError::BadArguments)
             }
         }
         "ROOMS" => {
             if pieces.len() == 1 {
                 ParsedAction::Process(IncomingMsg::Rooms)
             } else {
-                ParsedAction::Error(ParseError::BadArguments)
+                ParsedAction::Error(Command::Rooms, ParseError::BadArguments)
             }
         }
         "USERS" => {
@@ -125,14 +137,14 @@ pub fn parse_incoming(input: &str) -> ParsedAction {
                 if ROOM_REGEX.is_match(pieces[2]) {
                     ParsedAction::Process(IncomingMsg::Users(pieces[2].to_string()))
                 } else {
-                    ParsedAction::Error(ParseError::BadRoomNameFormat)
+                    ParsedAction::Error(Command::Users, ParseError::BadRoomNameFormat)
                 }
             } else {
-                ParsedAction::Error(ParseError::BadArguments)
+                ParsedAction::Error(Command::Users, ParseError::BadArguments)
             }
         }
         // ignore unknown commands
-        _ => ParsedAction::Error(ParseError::None),
+        _ => ParsedAction::None,
     }
 }
 
@@ -142,21 +154,15 @@ mod tests {
 
     #[test]
     fn test_parse_incoming_empty_input() {
-        assert_eq!(parse_incoming(""), ParsedAction::Error(ParseError::None));
+        assert_eq!(parse_incoming(""), ParsedAction::None);
     }
 
     #[test]
     fn test_parse_incoming_quit() {
-        assert_eq!(parse_incoming("QUIT"), ParsedAction::Quit);
-        assert_eq!(parse_incoming("QUIT other stuff"), ParsedAction::Quit);
-        assert_eq!(
-            parse_incoming("quit other stuff"),
-            ParsedAction::Error(ParseError::None)
-        );
-        assert_eq!(
-            parse_incoming("quit"),
-            ParsedAction::Error(ParseError::None)
-        );
+        assert_eq!(parse_incoming("QUIT"), ParsedAction::Process(IncomingMsg::Quit));
+        assert_eq!(parse_incoming("QUIT other stuff"), ParsedAction::Process(IncomingMsg::Quit));
+        assert_eq!(parse_incoming("quit other stuff"), ParsedAction::None);
+        assert_eq!(parse_incoming("quit"), ParsedAction::None);
     }
 
     #[test]
@@ -167,19 +173,19 @@ mod tests {
         );
         assert_eq!(
             parse_incoming("NAME"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Name, ParseError::BadArguments)
         );
         assert_eq!(
             parse_incoming("NAME @robert Steve"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Name, ParseError::BadArguments)
         );
         assert_eq!(
             parse_incoming("NAME @robert**"),
-            ParsedAction::Error(ParseError::BadNameFormat)
+            ParsedAction::Error(Command::Name, ParseError::BadNameFormat)
         );
         assert_eq!(
             parse_incoming("name"),
-            ParsedAction::Error(ParseError::None)
+            ParsedAction::Error(Command::Name, ParseError::None)
         );
     }
 
@@ -191,19 +197,19 @@ mod tests {
         );
         assert_eq!(
             parse_incoming("JOIN"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Join, ParseError::BadArguments)
         );
         assert_eq!(
             parse_incoming("JOIN #room #room2"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Join, ParseError::BadArguments)
         );
         assert_eq!(
             parse_incoming("JOIN @room"),
-            ParsedAction::Error(ParseError::BadRoomNameFormat)
+            ParsedAction::Error(Command::Join, ParseError::BadRoomNameFormat)
         );
         assert_eq!(
             parse_incoming("join"),
-            ParsedAction::Error(ParseError::None)
+            ParsedAction::Error(Command::Join, ParseError::None)
         );
     }
 
@@ -215,19 +221,19 @@ mod tests {
         );
         assert_eq!(
             parse_incoming("LEAVE"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Leave, ParseError::BadArguments)
         );
         assert_eq!(
             parse_incoming("LEAVE #room #room2"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Leave, ParseError::BadArguments)
         );
         assert_eq!(
             parse_incoming("LEAVE @room"),
-            ParsedAction::Error(ParseError::BadRoomNameFormat)
+            ParsedAction::Error(Command::Leave, ParseError::BadRoomNameFormat)
         );
         assert_eq!(
             parse_incoming("leave"),
-            ParsedAction::Error(ParseError::None)
+            ParsedAction::Error(Command::Leave, ParseError::None)
         );
     }
 
@@ -249,23 +255,23 @@ mod tests {
         );
         assert_eq!(
             parse_incoming("SAY #room++ hi there room!"),
-            ParsedAction::Error(ParseError::BadRoomNameFormat)
+            ParsedAction::Error(Command::Say, ParseError::BadRoomNameFormat)
         );
         assert_eq!(
             parse_incoming("SAY @friend% hi there friend!"),
-            ParsedAction::Error(ParseError::BadNameFormat)
+            ParsedAction::Error(Command::Say, ParseError::BadNameFormat)
         );
         assert_eq!(
             parse_incoming("SAY @dave"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Say, ParseError::BadArguments)
         );
         assert_eq!(
             parse_incoming("SAY #happy"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Say, ParseError::BadArguments)
         );
         assert_eq!(
             parse_incoming("SAY "),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Say, ParseError::BadArguments)
         );
     }
 
@@ -277,7 +283,7 @@ mod tests {
         );
         assert_eq!(
             parse_incoming("ROOMS stuff"),
-            ParsedAction::Error(ParseError::BadArguments)
+            ParsedAction::Error(Command::Rooms, ParseError::BadArguments)
         );
     }
 }

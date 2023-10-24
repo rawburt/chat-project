@@ -77,8 +77,20 @@ impl Room {
 pub enum ServerError {
     RoomUnknown(String),
     UserAlreadyExists(String),
+    // UserNotInRoom(<user-name>, <room-name>)
     UserNotInRoom(String, String),
     UserUnknown(String),
+}
+
+impl ToString for ServerError {
+    fn to_string(&self) -> String {
+        match self {
+            Self::RoomUnknown(name) => format!("ERROR room unknown {}", name),
+            Self::UserAlreadyExists(name) => format!("ERROR user already exists {}", name),
+            Self::UserNotInRoom(user_name, room_name) => format!("ERROR user not in room {} {}", user_name, room_name),
+            Self::UserUnknown(name) => format!("ERROR user unknown {}", name)
+        }
+    }
 }
 
 #[derive(Debug)]
