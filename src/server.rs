@@ -15,12 +15,6 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Framed, LinesCodec};
 
-#[derive(Debug)]
-enum ClientAction {
-    Quit,
-    Parsed(ParsedAction),
-}
-
 struct Client {
     socket_addr: SocketAddr,
     framed: Framed<TcpStream, LinesCodec>,
@@ -50,6 +44,12 @@ impl Client {
     pub fn set_name(&mut self, name: String) {
         self.name = Some(name);
     }
+}
+
+#[derive(Debug)]
+enum ClientAction {
+    Quit,
+    Parsed(ParsedAction),
 }
 
 async fn client_action(framed: &mut Framed<TcpStream, LinesCodec>) -> anyhow::Result<ClientAction> {
