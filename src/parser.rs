@@ -6,7 +6,7 @@ lazy_static! {
 }
 
 #[derive(Debug, PartialEq)]
-enum IncomingMsg {
+pub enum IncomingMsg {
     /// NAME <user-name>
     Name(String),
     /// JOIN <room-name>
@@ -24,7 +24,7 @@ enum IncomingMsg {
 }
 
 #[derive(Debug, PartialEq)]
-enum ParseError {
+pub enum ParseError {
     /// An error state that requires no message to the client.
     None,
     /// The given name doesn't match the required format.
@@ -36,7 +36,7 @@ enum ParseError {
 }
 
 #[derive(Debug, PartialEq)]
-enum ParsedAction {
+pub enum ParsedAction {
     /// Disconnect the client.
     Quit,
     /// Process a well-formed message.
@@ -45,7 +45,7 @@ enum ParsedAction {
     Error(ParseError),
 }
 
-fn parse_incoming(input: &str) -> ParsedAction {
+pub fn parse_incoming(input: &str) -> ParsedAction {
     if input.is_empty() {
         return ParsedAction::Error(ParseError::None);
     }
