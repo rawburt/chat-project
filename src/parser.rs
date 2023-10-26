@@ -11,7 +11,7 @@ pub enum IncomingMsg {
     Name(String),
     /// JOIN <room-name>
     Join(String),
-    /// LEAVE
+    /// LEAVE <room-name>
     Leave(String),
     /// SAY <room-name> <message>
     SayRoom(String, String),

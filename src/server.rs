@@ -67,7 +67,7 @@ async fn client_registration(
     server_state: Arc<Mutex<ServerState>>,
     client: &mut Client,
 ) -> anyhow::Result<bool> {
-    // wait for a NAME in order to register the client and user into the server state
+    // wait for a NAME in order to register the client
     loop {
         match client_action(&mut client.framed).await? {
             ClientAction::Quit => return Ok(false),
@@ -101,7 +101,10 @@ async fn client_registration(
     }
 }
 
-async fn client_teardown(server_state: Arc<Mutex<ServerState>>, client: &Client) -> anyhow::Result<()> {
+async fn client_teardown(
+    server_state: Arc<Mutex<ServerState>>,
+    client: &Client,
+) -> anyhow::Result<()> {
     if let Some(name) = &client.name {
         let mut state = server_state.lock().await;
         if let Err(e) = state.remove_user(name) {
@@ -159,12 +162,53 @@ pub async fn client_connection(
                             }
                         }
                     },
-                    ParsedAction::Process(_) => {
+                    // JOIN <room-name> - join a room
+                    ParsedAction::Process(IncomingMsg::Join(room)) => {
+                        let mut state = server_state.lock().await;
+                        match state.join_room(room, client.name.clone().unwrap()) {
+                            Ok(()) => {},
+                            Err(server_error) => {
+                                client.send_string(server_error.to_string()).await?;
+                            }
+                        }
+                    },
+                    // SAY <room-name> <message> - send a message to a room
+                    ParsedAction::Process(IncomingMsg::SayRoom(room, message)) => {
+                        let mut state = server_state.lock().await;
+                        match state.say_to_room(&client.name.clone().unwrap(), &room, message) {
+                            Ok(()) => {},
+                            Err(server_error) => {
+                                client.send_string(server_error.to_string()).await?;
+                            }
+                        }
+                    }
+                    // SAY <user-name> <message> - send a message to another client
+                    ParsedAction::Process(IncomingMsg::SayUser(user, message)) => {
+                        let state = server_state.lock().await;
+                        match state.say_to_user(&client.name.clone().unwrap(), &user, message) {
+                            Ok(()) => {},
+                            Err(server_error) => {
+                                client.send_string(server_error.to_string()).await?;
+                            }
+                        }
+                    },
+                    // ROOMS - list all rooms
+                    ParsedAction::Process(IncomingMsg::Rooms) => {
                         todo!();
                     },
+                    // LEAVE <room-name> - leave a room
+                    ParsedAction::Process(IncomingMsg::Leave(_room)) => {
+                        todo!();
+                    },
+                    // USERS <room-name> - list all users in a room
+                    ParsedAction::Process(IncomingMsg::Users(_room)) => {
+                        todo!();
+                    },
+                    // send any command parsing errors to the client
                     ParsedAction::Error(_, parse_error) => {
                         client.send_string(parse_error.to_string()).await?
                     }
+                    // empty and unknown commands are ignored
                     ParsedAction::None => {}
                 }
             }
