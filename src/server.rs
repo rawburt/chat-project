@@ -203,8 +203,14 @@ pub async fn client_connection(
                         }
                     },
                     // LEAVE <room-name> - leave a room
-                    ParsedAction::Process(IncomingMsg::Leave(_room)) => {
-                        todo!();
+                    ParsedAction::Process(IncomingMsg::Leave(room)) => {
+                        let mut state = server_state.lock().await;
+                        match state.leave_room(&room, &client.name.clone().unwrap()) {
+                            Ok(()) => {},
+                            Err(server_error) => {
+                                client.send_string(server_error.to_string()).await?;
+                            }
+                        }
                     },
                     // USERS <room-name> - list all users in a room
                     ParsedAction::Process(IncomingMsg::Users(room)) => {
