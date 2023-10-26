@@ -143,8 +143,8 @@ pub fn parse_incoming(input: &str) -> ParsedAction {
         }
         "USERS" => {
             if pieces.len() == 2 {
-                if ROOM_REGEX.is_match(pieces[2]) {
-                    ParsedAction::Process(IncomingMsg::Users(pieces[2].to_string()))
+                if ROOM_REGEX.is_match(pieces[1]) {
+                    ParsedAction::Process(IncomingMsg::Users(pieces[1].to_string()))
                 } else {
                     ParsedAction::Error(Command::Users, ParseError::BadRoomNameFormat)
                 }
@@ -290,6 +290,22 @@ mod tests {
         assert_eq!(
             parse_incoming("ROOMS stuff"),
             ParsedAction::Error(Command::Rooms, ParseError::BadArguments)
+        );
+    }
+
+    #[test]
+    fn test_parse_incoming_users() {
+        assert_eq!(
+            parse_incoming("USERS #test123"),
+            ParsedAction::Process(IncomingMsg::Users("#test123".to_string()))
+        );
+        assert_eq!(
+            parse_incoming("USERS"),
+            ParsedAction::Error(Command::Users, ParseError::BadArguments)
+        );
+        assert_eq!(
+            parse_incoming("USERS #juice #man"),
+            ParsedAction::Error(Command::Users, ParseError::BadArguments)
         );
     }
 }

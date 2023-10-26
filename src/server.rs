@@ -36,6 +36,8 @@ impl Client {
         }
     }
 
+    // TODO: make a send_error interface
+    
     pub async fn send_string(&mut self, string: String) -> anyhow::Result<()> {
         self.framed.send(string).await?;
         Ok(())
@@ -194,15 +196,28 @@ pub async fn client_connection(
                     },
                     // ROOMS - list all rooms
                     ParsedAction::Process(IncomingMsg::Rooms) => {
-                        todo!();
+                        let state = server_state.lock().await;
+                        for room in state.rooms() {
+                            client.send_string(format!("ROOM {}", room)).await?;
+                        }
                     },
                     // LEAVE <room-name> - leave a room
                     ParsedAction::Process(IncomingMsg::Leave(_room)) => {
                         todo!();
                     },
                     // USERS <room-name> - list all users in a room
-                    ParsedAction::Process(IncomingMsg::Users(_room)) => {
-                        todo!();
+                    ParsedAction::Process(IncomingMsg::Users(room)) => {
+                        let state = server_state.lock().await;
+                        match state.users(&room) {
+                            Ok(users) => {
+                                for user in users {
+                                    client.send_string(format!("USER {}", user)).await?;
+                                }
+                            }
+                            Err(server_error) => {
+                                client.send_string(server_error.to_string()).await?;
+                            }
+                        }
                     },
                     // send any command parsing errors to the client
                     ParsedAction::Error(_, parse_error) => {
