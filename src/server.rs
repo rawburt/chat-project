@@ -146,6 +146,19 @@ pub async fn client_connection(
                 Ok(ClientAction::Parsed(parsed_action)) => match parsed_action {
                     // QUIT - exit the loop for proper state cleanup
                     ParsedAction::Process(IncomingMsg::Quit) => break,
+                    // NAME <user-name> - rename the client
+                    ParsedAction::Process(IncomingMsg::Name(name)) => {
+                        let mut state = server_state.lock().await;
+                        match state.rename_user(&client.name.clone().unwrap(), &name) {
+                            Ok(()) => {
+                                // change client name if server successfully changes state
+                                client.set_name(name);
+                            },
+                            Err(server_error) => {
+                                client.send_string(server_error.to_string()).await?;
+                            }
+                        }
+                    },
                     ParsedAction::Process(_) => {
                         todo!();
                     },
