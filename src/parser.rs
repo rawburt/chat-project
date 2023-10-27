@@ -45,13 +45,12 @@ pub enum ParseError {
     BadArguments,
 }
 
-// TODO: implement Display instead
-impl ToString for ParseError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BadArguments => "ERROR bad arguments".to_string(),
-            Self::BadNameFormat => "ERROR bad name format".to_string(),
-            Self::BadRoomNameFormat => "ERROR bad room name format".to_string(),
+            Self::BadArguments => write!(f, "ERROR bad arguments"),
+            Self::BadNameFormat => write!(f, "ERROR bad name format"),
+            Self::BadRoomNameFormat => write!(f, "ERROR bad room name format"),
         }
     }
 }

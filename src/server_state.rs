@@ -9,12 +9,11 @@ pub enum OutgoingMsg {
     SaidRoom(String, String, String),
 }
 
-// TODO: implement Display instead
-impl ToString for OutgoingMsg {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for OutgoingMsg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SaidUser(from, message) => format!("{} SAID {}", from, message),
-            Self::SaidRoom(room, from, message) => format!("{} {} SAID {}", room, from, message),
+            Self::SaidUser(from, message) => write!(f, "{} SAID {}", from, message),
+            Self::SaidRoom(room, from, message) => write!(f, "{} {} SAID {}", room, from, message),
         }
     }
 }
