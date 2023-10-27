@@ -125,6 +125,15 @@ impl ServerState {
         if let Some(room) = self.rooms.get_mut(&room_name) {
             // add user to existing room
             room.add_user(user_name.clone());
+            // broadcast JOINED to room
+            let joined_msg = OutgoingMsg::Joined(room_name.clone(), user_name.clone());
+            for room_user_name in &room.users {
+                if room_user_name != &user_name {
+                    if let Some(user) = self.users.get_mut(room_user_name) {
+                        user.send(joined_msg.clone()).unwrap();
+                    }
+                }
+            }
         } else {
             // create new room
             let mut room = Room::new();
@@ -276,10 +285,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_server_state_join_room() {
+    #[tokio::test]
+    async fn test_server_state_join_room() {
         let mut state = ServerState::new();
-        let (sender, _receiver) = mpsc::unbounded_channel();
+        let (sender, mut robert_receiver) = mpsc::unbounded_channel();
         assert!(state
             .add_user("@robert".to_string(), User::new(sender))
             .is_ok());
@@ -311,6 +320,14 @@ mod tests {
             .unwrap()
             .rooms
             .contains("#testroom"));
+
+        assert_eq!(
+            Some(OutgoingMsg::Joined(
+                "#testroom".to_string(),
+                "@kelsey".to_string()
+            )),
+            robert_receiver.recv().await
+        );
 
         // join room that does not exist with user that does not exist
         assert_eq!(
@@ -607,6 +624,9 @@ mod tests {
 
         // dont send room message to self
         assert_eq!(Err(TryRecvError::Empty), receiver_dave.try_recv());
+        // drop the first messages which are the JOINED's
+        receiver_kelsey.recv().await;
+        receiver_kelsey.recv().await;
         assert_eq!(
             Some(OutgoingMsg::SaidRoom(
                 "#testroom".to_string(),
@@ -615,6 +635,8 @@ mod tests {
             )),
             receiver_kelsey.recv().await
         );
+        // drop the first message which is the JOINED
+        receiver_robert.recv().await;
         assert_eq!(
             Some(OutgoingMsg::SaidRoom(
                 "#testroom".to_string(),

@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 pub trait Message: Display {}
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum OutgoingMsg {
     // SAID(<from>, <message>)
     SaidUser(String, String),
@@ -12,6 +12,8 @@ pub enum OutgoingMsg {
     Room(String),
     // USER(<user-name>)
     User(String),
+    // Joined(<room>, <user>)
+    Joined(String, String),
 }
 
 impl Message for OutgoingMsg {}
@@ -23,6 +25,7 @@ impl Display for OutgoingMsg {
             Self::SaidRoom(room, from, message) => write!(f, "{} {} SAID {}", room, from, message),
             Self::Room(room) => write!(f, "ROOM {}", room),
             Self::User(name) => write!(f, "USER {}", name),
+            Self::Joined(room, user) => write!(f, "{} {} JOINED", room, user),
         }
     }
 }
