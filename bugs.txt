@@ -1,5 +1,1 @@
-sending empty message of spaces in SAY
-
 maybe say_to_room doesn't need `&mut self` because say_to_user doesn't
-
-ROOMS result when there are no rooms

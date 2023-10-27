@@ -119,7 +119,6 @@ async fn client_teardown(
     Ok(())
 }
 
-// TODO: logging on each incoming command
 /// The entry point for a new client connection to the server.
 pub async fn client_connection(
     server_state: Arc<Mutex<ServerState>>,
