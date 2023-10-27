@@ -129,6 +129,9 @@ pub async fn client_connection(
     // create new client
     let mut client = ClientConn::new(tcp_stream, socket_addr);
 
+    // tell the client they are connected to the server
+    client.send_message(OutgoingMsg::Connected).await?;
+
     // wait for a NAME in order to register the client and user into the server state
     let registered = client_registration(server_state.clone(), &mut client).await?;
 
@@ -136,6 +139,9 @@ pub async fn client_connection(
     if !registered {
         return Ok(());
     }
+
+    // tell the client they are registered to the server
+    client.send_message(OutgoingMsg::Registered).await?;
 
     // main client loop
     loop {

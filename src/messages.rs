@@ -4,6 +4,10 @@ pub trait Message: Display {}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum OutgoingMsg {
+    // CONNECTED
+    Connected,
+    // REGISTERED
+    Registered,
     // SAID(<from>, <message>)
     SaidUser(String, String),
     // SAID(<room>, <from>, <message>)
@@ -23,6 +27,8 @@ impl Message for OutgoingMsg {}
 impl Display for OutgoingMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Connected => write!(f, "CONNECTED"),
+            Self::Registered => write!(f, "REGISTERED"),
             Self::SaidUser(from, message) => write!(f, "{} SAID {}", from, message),
             Self::SaidRoom(room, from, message) => write!(f, "{} {} SAID {}", room, from, message),
             Self::Room(room) => write!(f, "ROOM {}", room),
