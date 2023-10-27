@@ -153,6 +153,14 @@ impl ServerState {
                 // delete rooms that are empty
                 if room.is_empty() {
                     self.rooms.remove(room_name);
+                } else {
+                    // broadcast LEFT to room
+                    let left_msg = OutgoingMsg::Left(room_name.to_string(), user_name.to_string());
+                    for room_user_name in &room.users {
+                        if let Some(user) = self.users.get_mut(room_user_name) {
+                            user.send(left_msg.clone()).unwrap();
+                        }
+                    }
                 }
                 // remove room from user record
                 if let Some(user) = self.users.get_mut(user_name) {
@@ -342,10 +350,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_server_state_leave_room() {
+    #[tokio::test]
+    async fn test_server_state_leave_room() {
         let mut state = ServerState::new();
-        let (sender, _receiver) = mpsc::unbounded_channel();
+        let (sender, mut robert_receiver) = mpsc::unbounded_channel();
         assert!(state
             .add_user("@robert".to_string(), User::new(sender))
             .is_ok());
@@ -359,6 +367,31 @@ mod tests {
             .unwrap()
             .rooms
             .contains("#testroom"));
+
+        // check the messages sent to existing users
+        let (sender, _receiver) = mpsc::unbounded_channel();
+        assert!(state
+            .add_user("@kelsey".to_string(), User::new(sender))
+            .is_ok());
+        assert!(state
+            .join_room("#testroom".to_string(), "@kelsey".to_string())
+            .is_ok());
+        assert_eq!(
+            Some(OutgoingMsg::Joined(
+                "#testroom".to_string(),
+                "@kelsey".to_string()
+            )),
+            robert_receiver.recv().await
+        );
+        assert!(state.leave_room("#testroom", "@kelsey").is_ok());
+        assert_eq!(
+            Some(OutgoingMsg::Left(
+                "#testroom".to_string(),
+                "@kelsey".to_string()
+            )),
+            robert_receiver.recv().await
+        );
+
         assert!(state.leave_room("#testroom", "@robert").is_ok());
         assert!(!state
             .users

@@ -12,8 +12,10 @@ pub enum OutgoingMsg {
     Room(String),
     // USER(<user-name>)
     User(String),
-    // Joined(<room>, <user>)
+    // JOINED(<room>, <user>)
     Joined(String, String),
+    // LEFT(<room>, <user>)
+    Left(String, String),
 }
 
 impl Message for OutgoingMsg {}
@@ -26,6 +28,7 @@ impl Display for OutgoingMsg {
             Self::Room(room) => write!(f, "ROOM {}", room),
             Self::User(name) => write!(f, "USER {}", name),
             Self::Joined(room, user) => write!(f, "{} {} JOINED", room, user),
+            Self::Left(room, user) => write!(f, "{} {} LEFT", room, user),
         }
     }
 }
