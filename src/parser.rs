@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::messages::{IncomingMsg, Message};
 use regex::Regex;
 
@@ -16,6 +18,19 @@ pub enum Command {
     Rooms,
 }
 
+impl Display for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name => write!(f, "Name"),
+            Self::Join => write!(f, "Join"),
+            Self::Leave => write!(f, "Leave"),
+            Self::Say => write!(f, "Say"),
+            Self::Users => write!(f, "Users"),
+            Self::Rooms => write!(f, "Rooms"),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     /// The given name doesn't match the required format.
@@ -26,7 +41,7 @@ pub enum ParseError {
     BadArguments,
 }
 
-impl std::fmt::Display for ParseError {
+impl Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadArguments => write!(f, "ERROR bad arguments"),
@@ -46,6 +61,16 @@ pub enum ParsedAction {
     Process(IncomingMsg),
     /// Error parsing a valid command.
     Error(Command, ParseError),
+}
+
+impl Display for ParsedAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "ParsedAction::None"),
+            Self::Process(msg) => write!(f, "ParsedAction::Process({})", msg),
+            Self::Error(cmd, err) => write!(f, "ParsedAction::Error({}, {})", cmd, err),
+        }
+    }
 }
 
 pub fn parse_incoming(input: &str) -> ParsedAction {

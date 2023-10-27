@@ -16,7 +16,7 @@ pub enum OutgoingMsg {
 
 impl Message for OutgoingMsg {}
 
-impl std::fmt::Display for OutgoingMsg {
+impl Display for OutgoingMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::SaidUser(from, message) => write!(f, "{} SAID {}", from, message),
@@ -45,4 +45,19 @@ pub enum IncomingMsg {
     Rooms,
     /// QUIT
     Quit,
+}
+
+impl Display for IncomingMsg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Name(name) => write!(f, "NAME {}", name),
+            Self::Join(room) => write!(f, "JOIN {}", room),
+            Self::Leave(room) => write!(f, "LEAVE {}", room),
+            Self::SayRoom(room, message) => write!(f, "SAY {} {}", room, message),
+            Self::SayUser(name, message) => write!(f, "SAY {} {}", name, message),
+            Self::Users(room) => write!(f, "USERS {}", room),
+            Self::Rooms => write!(f, "ROOMS"),
+            Self::Quit => write!(f, "QUIT"),
+        }
+    }
 }
