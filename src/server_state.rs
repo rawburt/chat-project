@@ -1,31 +1,15 @@
+use crate::messages::{Message, OutgoingMsg};
 use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
-pub enum OutgoingMsg {
-    // SAID(<from>, <message>)
-    SaidUser(String, String),
-    // SAID(<room>, <from>, <message>)
-    SaidRoom(String, String, String),
-}
-
-impl std::fmt::Display for OutgoingMsg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::SaidUser(from, message) => write!(f, "{} SAID {}", from, message),
-            Self::SaidRoom(room, from, message) => write!(f, "{} {} SAID {}", room, from, message),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct User {
-    sender: UnboundedSender<String>,
+    sender: UnboundedSender<OutgoingMsg>,
     rooms: HashSet<String>,
 }
 
 impl User {
-    pub fn new(sender: UnboundedSender<String>) -> Self {
+    pub fn new(sender: UnboundedSender<OutgoingMsg>) -> Self {
         Self {
             sender,
             rooms: HashSet::new(),
@@ -41,7 +25,7 @@ impl User {
     }
 
     pub fn send(&self, message: OutgoingMsg) -> Result<(), String> {
-        match self.sender.send(message.to_string()) {
+        match self.sender.send(message) {
             Ok(_) => Ok(()),
             Err(e) => Err(e.to_string()),
         }
@@ -95,8 +79,9 @@ impl std::fmt::Display for ServerError {
     }
 }
 
-impl std::error::Error for ServerError {}
+impl Message for ServerError {}
 
+impl std::error::Error for ServerError {}
 
 #[derive(Debug)]
 pub struct ServerState {
@@ -577,7 +562,10 @@ mod tests {
             .is_ok());
 
         assert_eq!(
-            Some("@robert SAID hi there! how are you?".to_string()),
+            Some(OutgoingMsg::SaidUser(
+                "@robert".to_string(),
+                "hi there! how are you?".to_string()
+            )),
             receiver_kelsey.recv().await
         );
 
@@ -620,11 +608,19 @@ mod tests {
         // dont send room message to self
         assert_eq!(Err(TryRecvError::Empty), receiver_dave.try_recv());
         assert_eq!(
-            Some("#testroom @dave SAID hello my room friends!".to_string()),
+            Some(OutgoingMsg::SaidRoom(
+                "#testroom".to_string(),
+                "@dave".to_string(),
+                "hello my room friends!".to_string()
+            )),
             receiver_kelsey.recv().await
         );
         assert_eq!(
-            Some("#testroom @dave SAID hello my room friends!".to_string()),
+            Some(OutgoingMsg::SaidRoom(
+                "#testroom".to_string(),
+                "@dave".to_string(),
+                "hello my room friends!".to_string()
+            )),
             receiver_robert.recv().await
         );
 

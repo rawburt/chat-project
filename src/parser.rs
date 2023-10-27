@@ -1,28 +1,9 @@
 use regex::Regex;
+use crate::messages::{IncomingMsg, Message};
 
 lazy_static! {
     static ref NAME_REGEX: Regex = Regex::new(r"^@[A-Za-z0-9\-\_]{4,20}$").unwrap();
     static ref ROOM_REGEX: Regex = Regex::new(r"^#[A-Za-z0-9\-\_]{4,20}$").unwrap();
-}
-
-#[derive(Debug, PartialEq)]
-pub enum IncomingMsg {
-    /// NAME <user-name>
-    Name(String),
-    /// JOIN <room-name>
-    Join(String),
-    /// LEAVE <room-name>
-    Leave(String),
-    /// SAY <room-name> <message>
-    SayRoom(String, String),
-    /// SAY <user-name> <message>
-    SayUser(String, String),
-    /// USERS <room-name>
-    Users(String),
-    /// ROOMS
-    Rooms,
-    /// QUIT
-    Quit,
 }
 
 #[derive(Debug, PartialEq)]
@@ -54,6 +35,8 @@ impl std::fmt::Display for ParseError {
         }
     }
 }
+
+impl Message for ParseError {}
 
 #[derive(Debug, PartialEq)]
 pub enum ParsedAction {

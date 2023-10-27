@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use chat_project::{
-    parser::{parse_incoming, Command, IncomingMsg, ParsedAction},
+    messages::{IncomingMsg, Message, OutgoingMsg},
+    parser::{parse_incoming, Command, ParsedAction},
     server_state::{ServerState, User},
 };
 use futures::SinkExt;
@@ -15,15 +16,15 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Framed, LinesCodec};
 
-struct Client {
+struct ClientConn {
     socket_addr: SocketAddr,
     framed: Framed<TcpStream, LinesCodec>,
-    sender: UnboundedSender<String>,
-    receiver: UnboundedReceiver<String>,
+    sender: UnboundedSender<OutgoingMsg>,
+    receiver: UnboundedReceiver<OutgoingMsg>,
     name: Option<String>,
 }
 
-impl Client {
+impl ClientConn {
     pub fn new(tcp_stream: TcpStream, socket_addr: SocketAddr) -> Self {
         let framed = Framed::new(tcp_stream, LinesCodec::new());
         let (sender, receiver) = unbounded_channel();
@@ -36,10 +37,8 @@ impl Client {
         }
     }
 
-    // TODO: make a send_error interface
-
-    pub async fn send_string(&mut self, string: String) -> anyhow::Result<()> {
-        self.framed.send(string).await?;
+    pub async fn send_message<T: Message>(&mut self, message: T) -> anyhow::Result<()> {
+        self.framed.send(message.to_string()).await?;
         Ok(())
     }
 
@@ -67,7 +66,7 @@ async fn client_action(framed: &mut Framed<TcpStream, LinesCodec>) -> anyhow::Re
 
 async fn client_registration(
     server_state: Arc<Mutex<ServerState>>,
-    client: &mut Client,
+    client: &mut ClientConn,
 ) -> anyhow::Result<bool> {
     // wait for a NAME in order to register the client
     loop {
@@ -84,14 +83,12 @@ async fn client_registration(
                                 return Ok(true);
                             }
                             // error trying to save client with given user name. possible error is duplicate user name.
-                            Err(server_error) => {
-                                client.send_string(server_error.to_string()).await?
-                            }
+                            Err(server_error) => client.send_message(server_error).await?,
                         }
                     }
                     // received NAME with errors
                     ParsedAction::Error(Command::Name, parse_error) => {
-                        client.send_string(parse_error.to_string()).await?
+                        client.send_message(parse_error).await?
                     }
                     // received QUIT
                     ParsedAction::Process(IncomingMsg::Quit) => return Ok(false),
@@ -105,7 +102,7 @@ async fn client_registration(
 
 async fn client_teardown(
     server_state: Arc<Mutex<ServerState>>,
-    client: &Client,
+    client: &ClientConn,
 ) -> anyhow::Result<()> {
     if let Some(name) = &client.name {
         let mut state = server_state.lock().await;
@@ -124,7 +121,7 @@ pub async fn client_connection(
     socket_addr: SocketAddr,
 ) -> anyhow::Result<()> {
     // create new client
-    let mut client = Client::new(tcp_stream, socket_addr);
+    let mut client = ClientConn::new(tcp_stream, socket_addr);
 
     // wait for a NAME in order to register the client and user into the server state
     let registered = client_registration(server_state.clone(), &mut client).await?;
@@ -139,7 +136,7 @@ pub async fn client_connection(
         tokio::select! {
             // handle outgoing data to client
             Some(message) = client.receiver.recv() => {
-                client.send_string(message).await?;
+                client.send_message(message).await?;
             }
             result = client_action(&mut client.framed) => match result {
                 // some kind of bad thing happened. remove the client from the state and raise an error.
@@ -161,7 +158,7 @@ pub async fn client_connection(
                                 client.set_name(name);
                             },
                             Err(server_error) => {
-                                client.send_string(server_error.to_string()).await?;
+                                client.send_message(server_error).await?
                             }
                         }
                     },
@@ -171,7 +168,7 @@ pub async fn client_connection(
                         match state.join_room(room, client.name.clone().unwrap()) {
                             Ok(()) => {},
                             Err(server_error) => {
-                                client.send_string(server_error.to_string()).await?;
+                                client.send_message(server_error).await?
                             }
                         }
                     },
@@ -181,7 +178,7 @@ pub async fn client_connection(
                         match state.say_to_room(&client.name.clone().unwrap(), &room, message) {
                             Ok(()) => {},
                             Err(server_error) => {
-                                client.send_string(server_error.to_string()).await?;
+                                client.send_message(server_error).await?
                             }
                         }
                     }
@@ -191,7 +188,7 @@ pub async fn client_connection(
                         match state.say_to_user(&client.name.clone().unwrap(), &user, message) {
                             Ok(()) => {},
                             Err(server_error) => {
-                                client.send_string(server_error.to_string()).await?;
+                                client.send_message(server_error).await?
                             }
                         }
                     },
@@ -199,7 +196,7 @@ pub async fn client_connection(
                     ParsedAction::Process(IncomingMsg::Rooms) => {
                         let state = server_state.lock().await;
                         for room in state.rooms() {
-                            client.send_string(format!("ROOM {}", room)).await?;
+                            client.send_message(OutgoingMsg::Room(room)).await?;
                         }
                     },
                     // LEAVE <room-name> - leave a room
@@ -208,7 +205,7 @@ pub async fn client_connection(
                         match state.leave_room(&room, &client.name.clone().unwrap()) {
                             Ok(()) => {},
                             Err(server_error) => {
-                                client.send_string(server_error.to_string()).await?;
+                                client.send_message(server_error).await?
                             }
                         }
                     },
@@ -218,17 +215,17 @@ pub async fn client_connection(
                         match state.users(&room) {
                             Ok(users) => {
                                 for user in users {
-                                    client.send_string(format!("USER {}", user)).await?;
+                                    client.send_message(OutgoingMsg::User(user)).await?;
                                 }
                             }
                             Err(server_error) => {
-                                client.send_string(server_error.to_string()).await?;
+                                client.send_message(server_error).await?
                             }
                         }
                     },
                     // send any command parsing errors to the client
                     ParsedAction::Error(_, parse_error) => {
-                        client.send_string(parse_error.to_string()).await?
+                        client.send_message(parse_error).await?
                     }
                     // empty and unknown commands are ignored
                     ParsedAction::None => {}
