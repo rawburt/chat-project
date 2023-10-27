@@ -1,5 +1,5 @@
-use regex::Regex;
 use crate::messages::{IncomingMsg, Message};
+use regex::Regex;
 
 lazy_static! {
     static ref NAME_REGEX: Regex = Regex::new(r"^@[A-Za-z0-9\-\_]{4,20}$").unwrap();
