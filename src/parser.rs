@@ -2,8 +2,8 @@ use crate::messages::{IncomingMsg, Message};
 use regex::Regex;
 
 lazy_static! {
-    static ref NAME_REGEX: Regex = Regex::new(r"^@[A-Za-z0-9\-\_]{4,20}$").unwrap();
-    static ref ROOM_REGEX: Regex = Regex::new(r"^#[A-Za-z0-9\-\_]{4,20}$").unwrap();
+    static ref NAME_REGEX: Regex = Regex::new(r"^@[A-Za-z0-9\-\_]{3,20}$").unwrap();
+    static ref ROOM_REGEX: Regex = Regex::new(r"^#[A-Za-z0-9\-\_]{3,20}$").unwrap();
 }
 
 #[derive(Debug, PartialEq)]
@@ -142,6 +142,16 @@ pub fn parse_incoming(input: &str) -> ParsedAction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_name_regex() {
+        // good
+        assert!(NAME_REGEX.is_match("@robert"));
+        assert!(NAME_REGEX.is_match("@rgp"));
+        // bad
+        assert!(!NAME_REGEX.is_match("@012345678901234567891"));
+        assert!(!NAME_REGEX.is_match("@gj"));
+    }
 
     #[test]
     fn test_parse_incoming_empty_input() {
