@@ -149,6 +149,7 @@ pub async fn client_connection(
             Some(message) = client.receiver.recv() => {
                 client.send_message(message).await?;
             }
+            // handle incoming client data
             result = client_action(&mut client.framed) => match result {
                 // some kind of bad thing happened. remove the client from the state and raise an error.
                 Err(e) => {
