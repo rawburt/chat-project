@@ -1,0 +1,6 @@
+https://tokio.rs/
+"Programming Rust" by Jim Blandy, Jason Orendorff, and Leonora F. S. Tindall
+https://www.youtube.com/watch?v=Iapc-qGTEBQ
+https://github.com/tokio-rs/tokio/blob/master/examples/
+https://github.com/ProgrammingRust/async-chat/tree/master
+https://github.com/matszpk/simple-irc-server/tree/main
