@@ -4,6 +4,8 @@ pub trait Message: Display {}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum OutgoingMsg {
+    // PING
+    Ping,
     // CONNECTED
     Connected,
     // REGISTERED
@@ -27,6 +29,7 @@ impl Message for OutgoingMsg {}
 impl Display for OutgoingMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Ping => write!(f, "PING"),
             Self::Connected => write!(f, "CONNECTED"),
             Self::Registered => write!(f, "REGISTERED"),
             Self::SaidUser(from, message) => write!(f, "{} SAID {}", from, message),
@@ -57,6 +60,8 @@ pub enum IncomingMsg {
     Rooms,
     /// QUIT
     Quit,
+    /// PONG
+    Pong,
 }
 
 impl Display for IncomingMsg {
@@ -70,6 +75,7 @@ impl Display for IncomingMsg {
             Self::Users(room) => write!(f, "USERS {}", room),
             Self::Rooms => write!(f, "ROOMS"),
             Self::Quit => write!(f, "QUIT"),
+            Self::Pong => write!(f, "PONG"),
         }
     }
 }

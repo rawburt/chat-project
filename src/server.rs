@@ -6,7 +6,11 @@ use chat_project::{
 };
 use futures::SinkExt;
 use log::info;
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{
     net::TcpStream,
     sync::{
@@ -17,24 +21,82 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Framed, LinesCodec};
 
+enum PingPongBall {
+    /// Send a PING message to the client.
+    SendPing,
+    /// Received a PONG message from the client.
+    GotPong,
+    /// Did not receive a PONG message from the client.
+    PongTimeout,
+}
+
+struct PingPongTable {
+    sender: UnboundedSender<PingPongBall>,
+    receiver: UnboundedReceiver<PingPongBall>,
+    last_activity: Arc<Mutex<Instant>>,
+}
+
+impl PingPongTable {
+    pub fn new() -> Self {
+        let (sender, receiver) = unbounded_channel();
+        let last_activity = Arc::new(Mutex::new(Instant::now()));
+        Self {
+            sender,
+            receiver,
+            last_activity,
+        }
+    }
+
+    pub fn start_worker(&self) {
+        let sender = self.sender.clone();
+        let last_activity = self.last_activity.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(90)).await;
+                let la = last_activity.lock().await;
+                let elapsed = la.elapsed().as_secs();
+                if elapsed >= 180 {
+                    // TODO: better error handling
+                    // PONG never received in time
+                    sender.send(PingPongBall::PongTimeout).unwrap();
+                } else if elapsed >= 90 {
+                    // TODO: better error handling
+                    // PING the client
+                    sender.send(PingPongBall::SendPing).unwrap();
+                }
+            }
+        });
+    }
+
+    pub async fn set_last_activity(&self) {
+        let mut la = self.last_activity.lock().await;
+        *la = Instant::now();
+    }
+}
+
 struct ClientConn {
     socket_addr: SocketAddr,
     framed: Framed<TcpStream, LinesCodec>,
     sender: UnboundedSender<OutgoingMsg>,
     receiver: UnboundedReceiver<OutgoingMsg>,
     name: Option<String>,
+    ppt: PingPongTable,
 }
 
 impl ClientConn {
     pub fn new(tcp_stream: TcpStream, socket_addr: SocketAddr) -> Self {
         let framed = Framed::new(tcp_stream, LinesCodec::new());
         let (sender, receiver) = unbounded_channel();
+        let ppt = PingPongTable::new();
+        ppt.start_worker();
+
         Self {
             socket_addr,
             framed,
             sender,
             receiver,
             name: None,
+            ppt,
         }
     }
 
@@ -72,34 +134,58 @@ async fn client_registration(
 ) -> anyhow::Result<bool> {
     // wait for a NAME in order to register the client
     loop {
-        match client_action(&mut client.framed).await? {
-            ClientAction::Quit => return Ok(false),
-            ClientAction::Parsed(parsed_action) => {
-                info!(
-                    "{} client_registration --> {}",
-                    client.socket_addr, parsed_action
-                );
-                match parsed_action {
-                    // received NAME <user-name>
-                    ParsedAction::Process(IncomingMsg::Name(name)) => {
-                        let mut state = server_state.lock().await;
-                        match state.add_user(name.clone(), User::new(client.sender.clone())) {
-                            Ok(()) => {
-                                client.set_name(name);
-                                return Ok(true);
+        tokio::select! {
+            // keep alive checker
+            Some(ping_pong_ball) = client.ppt.receiver.recv() => {
+                match ping_pong_ball {
+                    PingPongBall::GotPong => {
+                        client.ppt.set_last_activity().await;
+                    }
+                    PingPongBall::SendPing => {
+                        client.send_message(OutgoingMsg::Ping).await?;
+                    }
+                    PingPongBall::PongTimeout => {
+                        info!("{} PONG timeout", client.socket_addr);
+                        return Ok(false);
+                    }
+                }
+            }
+            // handle incoming client data
+            result = client_action(&mut client.framed) => match result {
+                Err(e) => return Err(anyhow!(e)),
+                Ok(ClientAction::Quit) => return Ok(false),
+                Ok(ClientAction::Parsed(parsed_action)) => {
+                    info!(
+                        "{} client_registration --> {}",
+                        client.socket_addr, parsed_action
+                    );
+                    match parsed_action {
+                        // received NAME <user-name>
+                        ParsedAction::Process(IncomingMsg::Name(name)) => {
+                            let mut state = server_state.lock().await;
+                            match state.add_user(name.clone(), User::new(client.sender.clone())) {
+                                Ok(()) => {
+                                    client.set_name(name);
+                                    return Ok(true);
+                                }
+                                // error trying to save client with given user name. possible error is duplicate user name.
+                                Err(server_error) => client.send_message(server_error).await?,
                             }
-                            // error trying to save client with given user name. possible error is duplicate user name.
-                            Err(server_error) => client.send_message(server_error).await?,
                         }
+                        // received NAME with errors
+                        ParsedAction::Error(Command::Name, parse_error) => {
+                            client.send_message(parse_error).await?
+                        }
+                        // receive PONG
+                        ParsedAction::Process(IncomingMsg::Pong) => {
+                            // TODO: better errors
+                            client.ppt.sender.send(PingPongBall::GotPong).unwrap();
+                        }
+                        // received QUIT
+                        ParsedAction::Process(IncomingMsg::Quit) => return Ok(false),
+                        // ignore commands other than NAME and QUIT
+                        ParsedAction::Process(_) | ParsedAction::Error(_, _) | ParsedAction::None => {}
                     }
-                    // received NAME with errors
-                    ParsedAction::Error(Command::Name, parse_error) => {
-                        client.send_message(parse_error).await?
-                    }
-                    // received QUIT
-                    ParsedAction::Process(IncomingMsg::Quit) => return Ok(false),
-                    // ignore commands other than NAME and QUIT
-                    ParsedAction::Process(_) | ParsedAction::Error(_, _) | ParsedAction::None => {}
                 }
             }
         }
@@ -148,6 +234,21 @@ pub async fn client_connection(
             // handle outgoing data to client
             Some(message) = client.receiver.recv() => {
                 client.send_message(message).await?;
+            }
+            // keep alive checker
+            Some(ping_pong_ball) = client.ppt.receiver.recv() => {
+                match ping_pong_ball {
+                    PingPongBall::GotPong => {
+                        client.ppt.set_last_activity().await;
+                    }
+                    PingPongBall::SendPing => {
+                        client.send_message(OutgoingMsg::Ping).await?;
+                    }
+                    PingPongBall::PongTimeout => {
+                        info!("{} PONG timeout", client.socket_addr);
+                        return Ok(());
+                    }
+                }
             }
             // handle incoming client data
             result = client_action(&mut client.framed) => match result {
@@ -237,6 +338,11 @@ pub async fn client_connection(
                                 }
                             }
                         },
+                        // PONG - reset timer
+                        ParsedAction::Process(IncomingMsg::Pong) => {
+                            // TODO: better errors
+                            client.ppt.sender.send(PingPongBall::GotPong).unwrap();
+                        }
                         // send any command parsing errors to the client
                         ParsedAction::Error(_, parse_error) => {
                             client.send_message(parse_error).await?

@@ -16,6 +16,7 @@ pub enum Command {
     Say,
     Users,
     Rooms,
+    Pong,
 }
 
 impl Display for Command {
@@ -27,6 +28,7 @@ impl Display for Command {
             Self::Say => write!(f, "Say"),
             Self::Users => write!(f, "Users"),
             Self::Rooms => write!(f, "Rooms"),
+            Self::Pong => write!(f, "Pong"),
         }
     }
 }
@@ -157,6 +159,13 @@ pub fn parse_incoming(input: &str) -> ParsedAction {
                 }
             } else {
                 ParsedAction::Error(Command::Users, ParseError::BadArguments)
+            }
+        }
+        "PONG" => {
+            if pieces.len() == 1 {
+                ParsedAction::Process(IncomingMsg::Pong)
+            } else {
+                ParsedAction::Error(Command::Pong, ParseError::BadArguments)
             }
         }
         // ignore unknown commands
@@ -323,6 +332,18 @@ mod tests {
         assert_eq!(
             parse_incoming("USERS #juice #man"),
             ParsedAction::Error(Command::Users, ParseError::BadArguments)
+        );
+    }
+
+    #[test]
+    fn test_parse_incoming_pong() {
+        assert_eq!(
+            parse_incoming("PONG"),
+            ParsedAction::Process(IncomingMsg::Pong)
+        );
+        assert_eq!(
+            parse_incoming("PONG abc def"),
+            ParsedAction::Error(Command::Pong, ParseError::BadArguments)
         );
     }
 }
