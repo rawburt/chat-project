@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use chat_project::{
+use crate::{
     messages::{IncomingMsg, Message, OutgoingMsg},
     parser::{parse_incoming, Command, ParsedAction},
     server_state::{ServerState, User},

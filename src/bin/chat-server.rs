@@ -3,8 +3,6 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::{net::TcpListener, sync::Mutex};
 
-pub mod server;
-
 #[derive(Parser)]
 #[command(author, version, long_about = None)]
 struct Cli {
@@ -36,7 +34,9 @@ async fn main() -> anyhow::Result<()> {
         // spawn new async process
         tokio::spawn(async move {
             log::info!("client connection accepted {}", addr);
-            if let Err(e) = server::client_connection(server_state, stream, addr).await {
+            if let Err(e) =
+                chat_project::server::client_connection(server_state, stream, addr).await
+            {
                 log::info!("error = {:?}", e);
             }
             log::info!("client connection closed {}", addr);
