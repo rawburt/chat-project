@@ -7,6 +7,7 @@ use chat_project::{
 use futures::SinkExt;
 use log::info;
 use std::{
+    fmt::Display,
     net::SocketAddr,
     sync::Arc,
     time::{Duration, Instant},
@@ -19,7 +20,7 @@ use tokio::{
     },
 };
 use tokio_stream::StreamExt;
-use tokio_util::codec::{Framed, LinesCodec};
+use tokio_util::codec::{Framed, LinesCodec, LinesCodecError};
 
 enum PingPongBall {
     /// Send a PING message to the client.
@@ -85,7 +86,7 @@ struct ClientConn {
 
 impl ClientConn {
     pub fn new(tcp_stream: TcpStream, socket_addr: SocketAddr) -> Self {
-        let framed = Framed::new(tcp_stream, LinesCodec::new());
+        let framed = Framed::new(tcp_stream, LinesCodec::new_with_max_length(1024));
         let (sender, receiver) = unbounded_channel();
         let ppt = PingPongTable::new();
         ppt.start_worker();
@@ -112,8 +113,24 @@ impl ClientConn {
 }
 
 #[derive(Debug)]
+enum FormatError {
+    MaxLineLengthExceeded,
+}
+
+impl Display for FormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MaxLineLengthExceeded => write!(f, "ERROR max length reached"),
+        }
+    }
+}
+
+impl Message for FormatError {}
+
+#[derive(Debug)]
 enum ClientAction {
     Quit,
+    Error(FormatError),
     Parsed(ParsedAction),
 }
 
@@ -121,8 +138,12 @@ async fn client_action(framed: &mut Framed<TcpStream, LinesCodec>) -> anyhow::Re
     match framed.next().await {
         // disconnected
         None => Ok(ClientAction::Quit),
+        // message too big
+        Some(Err(LinesCodecError::MaxLineLengthExceeded)) => {
+            Ok(ClientAction::Error(FormatError::MaxLineLengthExceeded))
+        }
         // error reading stream
-        Some(Err(e)) => Err(anyhow!(e)),
+        Some(Err(LinesCodecError::Io(e))) => Err(anyhow!(e)),
         // received data from client
         Some(Ok(input)) => Ok(ClientAction::Parsed(parse_incoming(&input))),
     }
@@ -153,6 +174,10 @@ async fn client_registration(
             // handle incoming client data
             result = client_action(&mut client.framed) => match result {
                 Err(e) => return Err(anyhow!(e)),
+                // max length error or line break error
+                Ok(ClientAction::Error(e)) => {
+                    client.send_message(e).await?
+                },
                 Ok(ClientAction::Quit) => return Ok(false),
                 Ok(ClientAction::Parsed(parsed_action)) => {
                     info!(
@@ -257,6 +282,10 @@ pub async fn client_connection(
                     client_teardown(server_state.clone(), &client).await?;
                     return Err(anyhow!(e))
                 },
+                // max length error or line break error
+                Ok(ClientAction::Error(e)) => {
+                    client.send_message(e).await?
+                }
                 // exit the loop for proper state cleanup
                 Ok(ClientAction::Quit) => break,
                 Ok(ClientAction::Parsed(parsed_action)) => {
