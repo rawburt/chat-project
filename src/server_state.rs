@@ -1,3 +1,5 @@
+//! The main state of the server.
+//! 
 use crate::messages::{Message, OutgoingMsg};
 use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc::UnboundedSender;
@@ -60,6 +62,7 @@ impl Room {
     }
 }
 
+/// Errors that happen as a result of the server trying to process a client message.
 #[derive(Debug, PartialEq)]
 pub enum ServerError {
     RoomUnknown(String),
@@ -82,6 +85,7 @@ impl std::fmt::Display for ServerError {
     }
 }
 
+/// A [ServerError] can be sent to clients.
 impl Message for ServerError {}
 
 /// [ServerState] is the core global state of the server. It maps user names to client connections. It stores the list of rooms
