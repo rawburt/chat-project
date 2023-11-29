@@ -1,5 +1,5 @@
 //! The main state of the server.
-//! 
+//!
 use crate::messages::{Message, OutgoingMsg};
 use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc::UnboundedSender;

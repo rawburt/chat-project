@@ -1,6 +1,6 @@
 //! [OutgoingMsg] and [IncomingMsg] codify the messages that are sent between clients and the server. These messages
 //! are defined by the chat protocol. ERROR messages are codified for each error type in various other modules.
-//! 
+//!
 use std::fmt::Display;
 
 /// [Message] trait signifies to the rest of the code that a piece of data is able to be sent/received between
