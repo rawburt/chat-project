@@ -1,28 +1,32 @@
+//! [OutgoingMsg] and [IncomingMsg] codify the messages that are sent between clients and the server. These messages
+//! are defined by the chat protocol. ERROR messages are codified for each error type in various other modules.
+//! 
 use std::fmt::Display;
 
 /// [Message] trait signifies to the rest of the code that a piece of data is able to be sent/received between
 /// the clients and the server.
 pub trait Message: Display {}
 
+/// Messages that the server sends to clients.
 #[derive(Debug, PartialEq, Clone)]
 pub enum OutgoingMsg {
-    // PING
+    /// PING
     Ping,
-    // CONNECTED
+    /// CONNECTED
     Connected,
-    // REGISTERED
+    /// REGISTERED
     Registered,
-    // SAID(<from>, <message>)
+    /// SAID from message
     SaidUser(String, String),
-    // SAID(<room>, <from>, <message>)
+    /// SAID room-name from message
     SaidRoom(String, String, String),
-    // ROOM(<room-name>)
+    /// ROOM room-name
     Room(String),
-    // USER(<user-name>)
+    /// USER user-name
     User(String),
-    // JOINED(<room>, <user>)
+    /// JOINED room-name user-name
     Joined(String, String),
-    // LEFT(<room>, <user>)
+    /// LEFT room-name user-name
     Left(String, String),
 }
 
@@ -44,19 +48,20 @@ impl Display for OutgoingMsg {
     }
 }
 
+/// Messages that the clients sends to the server.
 #[derive(Debug, PartialEq)]
 pub enum IncomingMsg {
-    /// NAME <user-name>
+    /// NAME user-name
     Name(String),
-    /// JOIN <room-name>
+    /// JOIN room-name
     Join(String),
-    /// LEAVE <room-name>
+    /// LEAVE room-name
     Leave(String),
-    /// SAY <room-name> <message>
+    /// SAY room-name message
     SayRoom(String, String),
-    /// SAY <user-name> <message>
+    /// SAY user-name message
     SayUser(String, String),
-    /// USERS <room-name>
+    /// USERS room-name
     Users(String),
     /// ROOMS
     Rooms,
