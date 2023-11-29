@@ -84,8 +84,6 @@ impl std::fmt::Display for ServerError {
 
 impl Message for ServerError {}
 
-impl std::error::Error for ServerError {}
-
 /// [ServerState] is the core global state of the server. It maps user names to client connections. It stores the list of rooms
 /// and all the users that have joined each room. Most messages that a client sends will flow through [ServerState].
 #[derive(Debug)]
