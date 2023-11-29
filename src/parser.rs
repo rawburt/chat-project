@@ -1,3 +1,4 @@
+//! Parse incoming messages into a well typed structure for use in the rest of the program.
 use std::fmt::Display;
 
 use crate::messages::{IncomingMsg, Message};
@@ -8,6 +9,7 @@ lazy_static! {
     static ref ROOM_REGEX: Regex = Regex::new(r"^#[A-Za-z0-9\-\_]{3,20}$").unwrap();
 }
 
+/// The supported incoming commands.
 #[derive(Debug, PartialEq)]
 pub enum Command {
     Name,
@@ -33,6 +35,7 @@ impl Display for Command {
     }
 }
 
+/// Error states of the parser.
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     /// The given name doesn't match the required format.
@@ -53,8 +56,10 @@ impl Display for ParseError {
     }
 }
 
+/// A [ParseError] can be sent to a client.
 impl Message for ParseError {}
 
+/// The result state of the parser.
 #[derive(Debug, PartialEq)]
 pub enum ParsedAction {
     /// Ignore the input.
@@ -75,7 +80,7 @@ impl Display for ParsedAction {
     }
 }
 
-/// Parse a client message.
+/// Parse an incoming client message.
 pub fn parse_incoming(input: &str) -> ParsedAction {
     if input.is_empty() {
         return ParsedAction::None;
