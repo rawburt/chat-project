@@ -1,1 +1,0 @@
-maybe say_to_room doesn't need `&mut self` because say_to_user doesn't
