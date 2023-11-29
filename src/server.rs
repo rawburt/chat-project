@@ -1,9 +1,9 @@
-use anyhow::anyhow;
 use crate::{
     messages::{IncomingMsg, Message, OutgoingMsg},
     parser::{parse_incoming, Command, ParsedAction},
     server_state::{ServerState, User},
 };
+use anyhow::anyhow;
 use futures::SinkExt;
 use log::info;
 use std::{
