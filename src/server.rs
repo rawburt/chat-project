@@ -1,3 +1,5 @@
+//! The main asyncronous orchestrator of the server and all the client connections.
+//! 
 use crate::{
     messages::{IncomingMsg, Message, OutgoingMsg},
     parser::{parse_incoming, Command, ParsedAction},
