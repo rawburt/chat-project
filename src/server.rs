@@ -31,6 +31,8 @@ enum PingPongBall {
     PongTimeout,
 }
 
+/// [PingPongTable] encapsulates the asyncronous worker used to orchestrate PING and PONG commands for each
+/// connected client in order to determine if a client needs to be disconnected from the server.
 struct PingPongTable {
     sender: UnboundedSender<PingPongBall>,
     receiver: UnboundedReceiver<PingPongBall>,
@@ -48,6 +50,9 @@ impl PingPongTable {
         }
     }
 
+    /// Spawn an asyncronous worker that will periodically check a connections liveliness. If the client is
+    /// inactive, a PING will be sent to the client. If a PONG is not received in time, a [PingPongBall::PongTimeout]
+    /// is triggered and the client will be disconnected.
     pub fn start_worker(&self) {
         let sender = self.sender.clone();
         let last_activity = self.last_activity.clone();
@@ -75,6 +80,8 @@ impl PingPongTable {
     }
 }
 
+/// [ClientConn] is created for each connected client. This stores the connection information and
+/// the various asyncronous channels.
 struct ClientConn {
     socket_addr: SocketAddr,
     framed: Framed<TcpStream, LinesCodec>,
@@ -134,6 +141,7 @@ enum ClientAction {
     Parsed(ParsedAction),
 }
 
+/// The main handler of incoming data from a client.
 async fn client_action(framed: &mut Framed<TcpStream, LinesCodec>) -> anyhow::Result<ClientAction> {
     match framed.next().await {
         // disconnected
@@ -149,6 +157,8 @@ async fn client_action(framed: &mut Framed<TcpStream, LinesCodec>) -> anyhow::Re
     }
 }
 
+/// The initial loop that registers a client. A client must provide a valid NAME before they are
+/// allowed full access to the server.
 async fn client_registration(
     server_state: Arc<Mutex<ServerState>>,
     client: &mut ClientConn,
@@ -217,6 +227,7 @@ async fn client_registration(
     }
 }
 
+/// Remove a client from the servers global state.
 async fn client_teardown(
     server_state: Arc<Mutex<ServerState>>,
     client: &ClientConn,

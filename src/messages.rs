@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+/// [Message] trait signifies to the rest of the code that a piece of data is able to be sent/received between
+/// the clients and the server.
 pub trait Message: Display {}
 
 #[derive(Debug, PartialEq, Clone)]

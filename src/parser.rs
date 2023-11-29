@@ -75,6 +75,7 @@ impl Display for ParsedAction {
     }
 }
 
+/// Parse a client message.
 pub fn parse_incoming(input: &str) -> ParsedAction {
     if input.is_empty() {
         return ParsedAction::None;

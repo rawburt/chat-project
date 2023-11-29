@@ -2,6 +2,8 @@ use crate::messages::{Message, OutgoingMsg};
 use std::collections::{HashMap, HashSet};
 use tokio::sync::mpsc::UnboundedSender;
 
+/// [User] stores the asyncronous channel that allows messages to go to a connected client and
+/// it stores which rooms a user has joined.
 #[derive(Debug)]
 pub struct User {
     sender: UnboundedSender<OutgoingMsg>,
@@ -32,6 +34,7 @@ impl User {
     }
 }
 
+/// A [Room] stores a list of users that have joined the room.
 #[derive(Debug, PartialEq)]
 struct Room {
     users: HashSet<String>,
@@ -83,6 +86,8 @@ impl Message for ServerError {}
 
 impl std::error::Error for ServerError {}
 
+/// [ServerState] is the core global state of the server. It maps user names to client connections. It stores the list of rooms
+/// and all the users that have joined each room. Most messages that a client sends will flow through [ServerState].
 #[derive(Debug)]
 pub struct ServerState {
     users: HashMap<String, User>,
@@ -97,6 +102,7 @@ impl ServerState {
         }
     }
 
+    /// Map a user name to a connected client.
     pub fn add_user(&mut self, name: String, user: User) -> Result<(), ServerError> {
         if self.users.contains_key(&name) {
             return Err(ServerError::UserAlreadyExists(name));
@@ -105,6 +111,7 @@ impl ServerState {
         Ok(())
     }
 
+    /// Remove a user from the state. Ensure they leave every room.
     pub fn remove_user(&mut self, name: &str) -> Result<(), ServerError> {
         match self.users.remove(name) {
             Some(user) => {
@@ -118,6 +125,7 @@ impl ServerState {
         }
     }
 
+    /// Add a user to a room.
     pub fn join_room(&mut self, room_name: String, user_name: String) -> Result<(), ServerError> {
         if !self.users.contains_key(&user_name) {
             return Err(ServerError::UserUnknown(user_name));
@@ -147,6 +155,7 @@ impl ServerState {
         Ok(())
     }
 
+    /// Remove a user from a room.
     pub fn leave_room(&mut self, room_name: &str, user_name: &str) -> Result<(), ServerError> {
         if let Some(room) = self.rooms.get_mut(room_name) {
             if room.remove_user(user_name) {
@@ -178,6 +187,7 @@ impl ServerState {
         }
     }
 
+    /// Change the user name of a connected client.
     pub fn rename_user(&mut self, old_name: &str, new_name: &str) -> Result<(), ServerError> {
         if let Some(user) = self.users.remove(old_name) {
             // rename user in each room the user is in
@@ -195,10 +205,12 @@ impl ServerState {
         }
     }
 
+    /// Get a list of rooms.
     pub fn rooms(&self) -> Vec<String> {
         self.rooms.keys().map(|k| k.to_string()).collect()
     }
 
+    /// Get a list of users that have joined a given room.
     pub fn users(&self, room_name: &str) -> Result<Vec<String>, ServerError> {
         if let Some(room) = self.rooms.get(room_name) {
             Ok(room.users.iter().map(|u| u.to_string()).collect())
@@ -207,6 +219,7 @@ impl ServerState {
         }
     }
 
+    /// Send a user-to-user private message.
     pub fn say_to_user(
         &self,
         from_user: &str,
@@ -223,6 +236,7 @@ impl ServerState {
         }
     }
 
+    /// Broadcast a message to every user in a room.
     pub fn say_to_room(
         &mut self,
         user_name: &str,
