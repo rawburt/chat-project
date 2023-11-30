@@ -64,11 +64,19 @@ impl PingPongTable {
                 let la = last_activity.lock().await;
                 let elapsed = la.elapsed().as_secs();
                 if elapsed >= 180 {
-                    // TODO: better error handling
+                    if sender.is_closed() {
+                        // client disconnected and worker is dangling
+                        info!("client disconnected. closing ping pong worker.");
+                        return;
+                    }
                     // PONG never received in time
                     sender.send(PingPongBall::PongTimeout).unwrap();
                 } else if elapsed >= 90 {
-                    // TODO: better error handling
+                    if sender.is_closed() {
+                        // client disconnected and worker is dangling
+                        info!("client disconnected. closing ping pong worker.");
+                        return;
+                    }
                     // PING the client
                     sender.send(PingPongBall::SendPing).unwrap();
                 }
